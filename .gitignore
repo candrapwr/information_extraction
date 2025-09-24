@@ -1,0 +1,22 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE settings
+.idea/
+.vscode/
+
+# macOS clutter
+.DS_Store
+
+# OCR temp files
+temp_*.jpg
+*.log
+
+# Matplotlib cache dir if set locally
+mpl-cache/
