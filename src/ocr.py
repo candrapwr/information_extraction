@@ -208,7 +208,7 @@ def extract_llm_data(image_path: str, doc_type: str, config: Optional[Dict] = No
     if not text_candidates:
         raise RuntimeError("LLM response missing text content.")
 
-    raw_text = text_candidates[0].strip()
+    raw_text = text_candidates[0].strip().replace("\n", "").replace("```json", "").replace("```", "")
     try:
         data = json.loads(raw_text)
     except json.JSONDecodeError as exc:  # pragma: no cover - depends on external API

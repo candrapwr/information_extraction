@@ -104,6 +104,8 @@ curl -X POST http://localhost:5000/extract \
 
 Respons API mengikuti format JSON yang sama dengan CLI.
 
+**Port & host:** ubah lewat `config.yaml` (`server.host`, `server.port`, `server.debug`) atau override port/debug sementara via environment variable `OCR_API_PORT` dan `OCR_API_DEBUG` sebelum menjalankan `python src/api.py`.
+
 ## Mode OCR
 - **pytesseract**: mode default yang memanfaatkan instalasi Tesseract lokal. Pastikan `tesseract.path` dan `tesseract.lang` sudah benar.
 - **easyocr**: gunakan ketika ingin memanfaatkan model EasyOCR. Atur daftar bahasa dan opsi GPU di `config.yaml`.
@@ -114,6 +116,7 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 - **Tesseract**: perbarui `tesseract.path` bila executable tidak berada di `/usr/bin/tesseract`.
 - **Bahasa OCR**: `tesseract.lang` menerima string bahasa dipisah `+` (contoh `eng+ind`). Modul akan otomatis menggunakan bahasa yang tersedia bila sebagian belum terpasang.
 - **Pra-pemrosesan**: atur `preprocess.max_width`, `max_height`, `max_filesize_mb`, `jpeg_quality`, dan parameter CLAHE untuk mengendalikan resolusi/ukuran hasil preprocess.
+- **Server Flask**: sesuaikan `server.host`, `server.port`, `server.debug` atau gunakan env var `OCR_API_PORT`/`OCR_API_DEBUG` saat menjalankan API.
 - **EasyOCR**: atur daftar bahasa (`easyocr.lang`) dan penggunaan GPU (`easyocr.gpu`).
 - **LLM**: isi `llm.endpoint`, `llm.model`, serta `llm.api_key_env` atau `llm.api_key`. Prompt default dapat ditimpa melalui `llm.prompts`.
 - **Regex Template**: `templates.ktp.fields` berisi pola dasar. Parser juga memakai heuristik tambahan (`src/parser.py`) untuk menangani variasi label / kesalahan OCR.
