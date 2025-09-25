@@ -110,7 +110,7 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 - **pytesseract**: mode default yang memanfaatkan instalasi Tesseract lokal. Pastikan `tesseract.path` dan `tesseract.lang` sudah benar.
 - **easyocr**: gunakan ketika ingin memanfaatkan model EasyOCR. Atur daftar bahasa dan opsi GPU di `config.yaml`.
 - **llm**: memanggil endpoint LLM (contoh Google Gemini) untuk mengembalikan JSON terstruktur. Pastikan environment variable untuk API key sesuai (`GEMINI_API_KEY` secara default) dan endpoint/model sudah disetel.
-  Respons akan menyertakan objek `usage` bila penyedia LLM mengembalikan informasi konsumsi token.
+  Respons akan menyertakan objek `usage` bila penyedia LLM mengembalikan informasi konsumsi token, dan pipeline otomatis mengirim satu permintaan dummy (gambar kosong → `{}`) sebelum permintaan utama agar sesi model siap.
 
 ## Konfigurasi
 - **Tesseract**: perbarui `tesseract.path` bila executable tidak berada di `/usr/bin/tesseract`.
@@ -118,7 +118,7 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 - **Pra-pemrosesan**: atur `preprocess.max_width`, `max_height`, `max_filesize_mb`, `jpeg_quality`, dan parameter CLAHE untuk mengendalikan resolusi/ukuran hasil preprocess.
 - **Server Flask**: sesuaikan `server.host`, `server.port`, `server.debug` atau gunakan env var `OCR_API_PORT`/`OCR_API_DEBUG` saat menjalankan API.
 - **EasyOCR**: atur daftar bahasa (`easyocr.lang`) dan penggunaan GPU (`easyocr.gpu`).
-- **LLM**: isi `llm.endpoint`, `llm.model`, serta `llm.api_key_env` atau `llm.api_key`. Prompt default dapat ditimpa melalui `llm.prompts`.
+- **LLM**: isi `llm.endpoint`, `llm.model`, serta `llm.api_key_env` atau `llm.api_key`. Prompt default dapat ditimpa melalui `llm.prompts`, dan Anda dapat menyesuaikan balasan dummy via `llm.dummy_response` bila diperlukan.
 - **Regex Template**: `templates.ktp.fields` berisi pola dasar. Parser juga memakai heuristik tambahan (`src/parser.py`) untuk menangani variasi label / kesalahan OCR.
 
 ## Tips Kualitas OCR
@@ -137,5 +137,3 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 - Normalisasi hasil (title case, format tanggal ISO).
 - Tambah test suite + dataset contoh untuk regresi otomatis.
 
-## Lisensi
-Proyek ini tidak menyertakan lisensi eksplisit. Tambahkan lisensi pilihan Anda sebelum dipublikasikan.

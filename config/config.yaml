@@ -11,6 +11,10 @@ preprocess:
   jpeg_quality: 100           # Quality for saved preprocessed image
   clahe_clip: 2.0            # CLAHE clip limit
   clahe_grid: [8, 8]         # CLAHE tile grid size
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
 easyocr:
   lang:
     - id
@@ -18,9 +22,10 @@ easyocr:
   gpu: false
 llm:
   endpoint: "https://generativelanguage.googleapis.com/v1beta"
-  model: "gemini-2.5-flash"
-  api_key: "api"  # Set this environment variable with your API key
+  model: "gemini-2.0-flash"
+  api_key: ""  # Set this environment variable with your API key
   timeout: 30
+  dummy_response: "{}"
   prompts:
     ktp: |-
       You are an AI that only outputs raw JSON. Never include explanations, markdown formatting, or any other text. Do not wrap the response in code fences. Return only a valid JSON object.

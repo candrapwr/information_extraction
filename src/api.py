@@ -82,4 +82,17 @@ def extract_data():
                     pass
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    config = load_config()
+    server_config = config.get('server', {})
+    host = server_config.get('host', '0.0.0.0')
+    port_override = os.getenv('OCR_API_PORT')
+    try:
+        port = int(port_override) if port_override else int(server_config.get('port', 5000))
+    except (TypeError, ValueError):
+        port = 5000
+    debug_value = os.getenv('OCR_API_DEBUG', server_config.get('debug', True))
+    if isinstance(debug_value, str):
+        debug = debug_value.lower() in {'1', 'true', 'yes', 'on'}
+    else:
+        debug = bool(debug_value)
+    app.run(host=host, port=port, debug=debug)
