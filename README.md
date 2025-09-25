@@ -1,11 +1,13 @@
 # KTP & Passport OCR
 
-Pipeline untuk mengekstrak informasi dari KTP Indonesia dan paspor internasional menggunakan Python, OpenCV, dan Tesseract. Proyek ini menyediakan skrip CLI serta layanan Flask sederhana untuk integrasi ke aplikasi lain.
+Pipeline untuk mengekstrak informasi dari KTP Indonesia dan paspor internasional menggunakan Python, OpenCV, serta beberapa engine OCR (pytesseract, EasyOCR, atau API LLM). Proyek ini menyediakan skrip CLI serta layanan Flask sederhana untuk integrasi ke aplikasi lain.
 
 ## Fitur Utama
 - Ekstraksi seluruh elemen penting KTP (NIK, alamat lengkap, RT/RW, kelurahan/desa, kecamatan, agama, status kawin, pekerjaan, kewarganegaraan, masa berlaku, dsb.).
 - Pembacaan MRZ paspor menggunakan *passporteye* serta OCR tambahan untuk informasi non-MRZ.
 - Pra-pemrosesan citra (grayscale + Otsu thresholding) agar hasil OCR lebih stabil.
+- Otomatis mengecilkan resolusi/ukuran file yang terlalu besar sebelum OCR.
+- Pilihan engine OCR: pytesseract (default), EasyOCR, atau API LLM (misal Google Gemini) dengan parameter yang sama di CLI/API.
 - Heuristik toleran terhadap hasil OCR yang noisy (mis-read huruf, tanda baca hilang, dll.).
 - Konfigurasi fleksibel melalui `config/config.yaml` untuk jalur Tesseract, bahasa OCR, dan pola regex.
 
@@ -24,7 +26,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Edit `config/config.yaml` agar `tesseract.path` menunjuk ke executable Tesseract di sistem Anda dan sesuaikan daftar bahasa (`lang`).
+Edit `config/config.yaml` agar `tesseract.path` menunjuk ke executable Tesseract di sistem Anda dan sesuaikan daftar bahasa (`lang`). Untuk mode EasyOCR dan LLM, sesuaikan juga bagian `easyocr` serta `llm` sesuai kebutuhan.
 
 ## Struktur Proyek
 ```
@@ -34,7 +36,7 @@ Edit `config/config.yaml` agar `tesseract.path` menunjuk ke executable Tesseract
 ├── src/
 │   ├── api.py               # Flask API
 │   ├── preprocess.py        # Fungsi pra-pemrosesan citra
-│   ├── ocr.py               # Wrapper pytesseract + MRZ
+│   ├── ocr.py               # Wrapper pytesseract/EasyOCR/LLM + MRZ
 │   └── parser.py            # Parser KTP & paspor
 ├── main.py                  # Entry-point CLI
 ├── requirements.txt
@@ -43,10 +45,12 @@ Edit `config/config.yaml` agar `tesseract.path` menunjuk ke executable Tesseract
 
 ## Penggunaan CLI
 ```bash
-python main.py <path_gambar> [ktp|passport]
+python main.py <path_gambar> [ktp|passport] [pytesseract|easyocr|llm]
 
 # contoh
-python main.py data/debby_ktp.jpg ktp
+python main.py data/debby_ktp.jpg ktp           # default: pytesseract
+python main.py data/debby_ktp.jpg ktp easyocr   # pakai EasyOCR
+python main.py data/debby_ktp.jpg ktp llm       # pakai API LLM
 python main.py data/sample_passport.jpg passport
 ```
 
@@ -94,14 +98,24 @@ Contoh permintaan menggunakan `curl`:
 ```bash
 curl -X POST http://localhost:5000/extract \
   -F "file=@data/debby_ktp.jpg" \
-  -F "type=ktp"
+  -F "type=ktp" \
+  -F "provider=easyocr"
 ```
 
 Respons API mengikuti format JSON yang sama dengan CLI.
 
+## Mode OCR
+- **pytesseract**: mode default yang memanfaatkan instalasi Tesseract lokal. Pastikan `tesseract.path` dan `tesseract.lang` sudah benar.
+- **easyocr**: gunakan ketika ingin memanfaatkan model EasyOCR. Atur daftar bahasa dan opsi GPU di `config.yaml`.
+- **llm**: memanggil endpoint LLM (contoh Google Gemini) untuk mengembalikan JSON terstruktur. Pastikan environment variable untuk API key sesuai (`GEMINI_API_KEY` secara default) dan endpoint/model sudah disetel.
+  Respons akan menyertakan objek `usage` bila penyedia LLM mengembalikan informasi konsumsi token.
+
 ## Konfigurasi
 - **Tesseract**: perbarui `tesseract.path` bila executable tidak berada di `/usr/bin/tesseract`.
 - **Bahasa OCR**: `tesseract.lang` menerima string bahasa dipisah `+` (contoh `eng+ind`). Modul akan otomatis menggunakan bahasa yang tersedia bila sebagian belum terpasang.
+- **Pra-pemrosesan**: atur `preprocess.max_width`, `max_height`, `max_filesize_mb`, `jpeg_quality`, dan parameter CLAHE untuk mengendalikan resolusi/ukuran hasil preprocess.
+- **EasyOCR**: atur daftar bahasa (`easyocr.lang`) dan penggunaan GPU (`easyocr.gpu`).
+- **LLM**: isi `llm.endpoint`, `llm.model`, serta `llm.api_key_env` atau `llm.api_key`. Prompt default dapat ditimpa melalui `llm.prompts`.
 - **Regex Template**: `templates.ktp.fields` berisi pola dasar. Parser juga memakai heuristik tambahan (`src/parser.py`) untuk menangani variasi label / kesalahan OCR.
 
 ## Tips Kualitas OCR
@@ -122,4 +136,3 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 
 ## Lisensi
 Proyek ini tidak menyertakan lisensi eksplisit. Tambahkan lisensi pilihan Anda sebelum dipublikasikan.
-

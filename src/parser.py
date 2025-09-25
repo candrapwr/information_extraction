@@ -328,6 +328,24 @@ def parse_ktp(text, config):
         result.setdefault(field, "Not found")
     return result
 
+
+def normalize_ktp_result(data):
+    """Ensure KTP result dict contains all expected fields with default fallbacks."""
+    normalized = {}
+    source = data or {}
+    for field in KTP_FIELDS:
+        raw_value = source.get(field, "Not found")
+        if raw_value is None:
+            normalized[field] = "Not found"
+            continue
+        if isinstance(raw_value, str):
+            value = raw_value.strip()
+            normalized[field] = value if value else "Not found"
+        else:
+            normalized[field] = raw_value
+    return normalized
+
+
 def parse_passport(mrz_data, text):
     """Parse passport data (MRZ + additional text)."""
     result = {}

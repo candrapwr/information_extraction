@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 
 from flask import Flask, request, jsonify
 
@@ -7,8 +8,8 @@ from flask import Flask, request, jsonify
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.preprocess import preprocess_image
-from src.ocr import extract_text, extract_mrz
-from src.parser import load_config, parse_ktp, parse_passport
+from src.ocr import extract_text, extract_mrz, extract_llm_data
+from src.parser import load_config, parse_ktp, parse_passport, normalize_ktp_result
 
 app = Flask(__name__)
 
@@ -26,35 +27,59 @@ def extract_data():
     image_path = f"temp_{file.filename}"
     file.save(image_path)
     
+    preprocessed_path = None
     try:
-        # Preprocess image
-        preprocessed_path = preprocess_image(image_path)
-        
-        # Load config
+        # Load config & determine provider
         config = load_config()
-        
-        # Extract and parse data
-        doc_type = request.form.get('type', 'ktp')  # 'ktp' or 'passport'
-        if doc_type == 'passport':
-            mrz_data = extract_mrz(preprocessed_path)
-            text = extract_text(preprocessed_path, config['tesseract']['lang'])
-            result = parse_passport(mrz_data, text)
+        provider = (request.form.get('provider') or config.get('ocr', {}).get('default_provider', 'pytesseract')).lower()
+
+        # Preprocess image when appropriate
+        if provider != 'llm':
+            preprocessed_path = preprocess_image(image_path, config=config)
+
+        doc_type = request.form.get('type', 'ktp')
+        ocr_input_path = preprocessed_path or image_path
+
+        usage = None
+        if provider == 'llm':
+            result, usage = extract_llm_data(image_path, doc_type, config)
+            if doc_type.lower() == 'ktp':
+                result = normalize_ktp_result(result)
         else:
-            text = extract_text(preprocessed_path, config['tesseract']['lang'])
-            result = parse_ktp(text, config)
-        
-        # Clean up temporary files
-        os.remove(image_path)
-        os.remove(preprocessed_path)
-        
-        return jsonify({
+            text = extract_text(
+                ocr_input_path,
+                config['tesseract']['lang'],
+                provider=provider,
+                config=config,
+            )
+            if doc_type == 'passport':
+                mrz_data = extract_mrz(ocr_input_path)
+                result = parse_passport(mrz_data, text)
+            else:
+                result = parse_ktp(text, config)
+
+        response = {
             "status": "success",
             "data": result,
-            "timestamp": "2025-09-24T12:42:00+07:00"  # WIB
-        })
-    
+            "timestamp": datetime.now().astimezone().isoformat()
+        }
+        if usage:
+            response["usage"] = usage
+        return jsonify(response)
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().astimezone().isoformat(),
+        }), 500
+    finally:
+        for path in {image_path, preprocessed_path}:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
 if __name__ == '__main__':
     app.run(debug=True)

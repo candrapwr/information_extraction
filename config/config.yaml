@@ -3,6 +3,61 @@ tesseract:
   lang: "eng+ind"            # OCR languages (English + Indonesian)
 ocr:
   confidence_threshold: 0.6  # Confidence threshold for OCR results
+  default_provider: "pytesseract"  # pytesseract | easyocr | llm
+preprocess:
+  max_width: 800            # Downscale if width exceeds this (pixels)
+  max_height: 800           # Downscale if height exceeds this (pixels)
+  max_filesize_mb: 1         # Downscale if original file exceeds this size
+  jpeg_quality: 100           # Quality for saved preprocessed image
+  clahe_clip: 2.0            # CLAHE clip limit
+  clahe_grid: [8, 8]         # CLAHE tile grid size
+easyocr:
+  lang:
+    - id
+    - en
+  gpu: false
+llm:
+  endpoint: "https://generativelanguage.googleapis.com/v1beta"
+  model: "gemini-2.5-flash"
+  api_key: "api"  # Set this environment variable with your API key
+  timeout: 30
+  prompts:
+    ktp: |-
+      You are an AI that only outputs raw JSON. Never include explanations, markdown formatting, or any other text. Do not wrap the response in code fences. Return only a valid JSON object.
+
+      Extract the following fields from the Indonesian KTP image:
+      - province
+      - city
+      - nik
+      - name
+      - birth_place
+      - birth_date
+      - gender
+      - blood_type
+      - address
+      - rt_rw
+      - kelurahan_desa
+      - kecamatan
+      - religion
+      - marital_status
+      - occupation
+      - nationality
+      - valid_until
+
+      If a field is missing or unreadable, set its value to null. Respond ONLY with the JSON object.
+    passport: |-
+      You are an AI that only outputs raw JSON. Never include explanations, markdown formatting, or any other text. Do not wrap the response in code fences. Return only a valid JSON object.
+
+      Extract the following fields from the passport image:
+      - passport_number
+      - name
+      - nationality
+      - date_of_birth
+      - gender
+      - expiration_date
+      - country_code
+
+      If a field is missing or unreadable, set its value to null. Respond ONLY with the JSON object.
 templates:
   ktp:
     fields:
