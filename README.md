@@ -3,7 +3,7 @@
 Pipeline untuk mengekstrak informasi dari KTP Indonesia dan paspor internasional menggunakan Python, OpenCV, serta beberapa engine OCR (pytesseract, EasyOCR, atau API LLM). Proyek ini menyediakan skrip CLI serta layanan Flask sederhana untuk integrasi ke aplikasi lain.
 
 ## Fitur Utama
-- Ekstraksi seluruh elemen penting KTP (NIK, alamat lengkap, RT/RW, kelurahan/desa, kecamatan, agama, status kawin, pekerjaan, kewarganegaraan, masa berlaku, dsb.).
+- Ekstraksi elemen inti KTP: NIK, nama, alamat lengkap, RT/RW, kelurahan/desa, kecamatan, kota/kabupaten, provinsi, tempat & tanggal lahir, jenis kelamin, agama, serta status perkawinan.
 - Pembacaan MRZ paspor menggunakan *passporteye* serta OCR tambahan untuk informasi non-MRZ.
 - Pra-pemrosesan citra (grayscale + Otsu thresholding) agar hasil OCR lebih stabil.
 - Otomatis mengecilkan resolusi/ukuran file yang terlalu besar sebelum OCR.
@@ -26,7 +26,30 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Edit `config/config.yaml` agar `tesseract.path` menunjuk ke executable Tesseract di sistem Anda dan sesuaikan daftar bahasa (`lang`). Untuk mode EasyOCR dan LLM, sesuaikan juga bagian `easyocr` serta `llm` sesuai kebutuhan.
+### Instalasi Tesseract
+- **macOS** (Homebrew):
+  ```bash
+  brew install tesseract
+  ```
+  Setelah terpasang, jalankan `which tesseract`. Pada Mac Apple Silicon biasanya `tesseract` berada di `/opt/homebrew/bin/tesseract`, sedangkan Mac Intel di `/usr/local/bin/tesseract`.
+
+- **Ubuntu/Debian**:
+  ```bash
+  sudo apt-get update
+  sudo apt-get install tesseract-ocr tesseract-ocr-ind
+  ```
+  Jalankan `which tesseract` untuk memastikan executable berada di `/usr/bin/tesseract` (default pada sebagian besar distro).
+
+### Konfigurasi Tesseract
+Perbarui `config/config.yaml` agar `tesseract.path` menunjuk ke hasil `which tesseract`. Misal:
+```yaml
+tesseract:
+  path: "/opt/homebrew/bin/tesseract"
+  lang: "eng+ind"
+```
+Jika Anda menghapus baris `path`, aplikasi otomatis memakai lokasi yang ditemukan oleh `shutil.which("tesseract")`.
+
+Salin template `config/config.example.yaml` menjadi `config/config.yaml`, lalu sesuaikan nilainya (termasuk API key jika menggunakan mode LLM). Edit `config/config.yaml` untuk menyesuaikan bahasa (`tesseract.lang`) maupun opsi lain. Untuk mode EasyOCR dan LLM, sesuaikan juga bagian `easyocr` serta `llm` sesuai kebutuhan.
 
 ## Struktur Proyek
 ```
@@ -54,31 +77,35 @@ python main.py data/debby_ktp.jpg ktp llm       # pakai API LLM
 python main.py data/sample_passport.jpg passport
 ```
 
-Keluaran berupa JSON yang mencakup status, data hasil ekstraksi, serta timestamp.
+Keluaran berupa JSON yang mencakup status, data hasil ekstraksi, indikator `valid`, serta timestamp.
+
+## Mode Web Sederhana
+```bash
+python src/api.py
+```
+Buka browser ke `http://localhost:8000/` (atau port sesuai konfigurasi). Form web memungkinkan Anda memilih berkas gambar, tipe dokumen (`ktp`/`passport`), serta engine OCR (`pytesseract`, `easyocr`, `llm`). Hasil ekstraksi akan tampil sebagai JSON pada halaman yang sama.
 
 ### Contoh Keluaran KTP
 ```json
 {
   "status": "success",
   "data": {
-    "province": "DKI JAKARTA",
-    "city": "JAKARTA SELATAN",
-    "nik": "0074096112900001",
-    "name": "AKU",
-    "birth_place": "JAKARTA",
-    "birth_date": "24-12-1980",
-    "gender": "Not found",
-    "blood_type": "Not found",
     "address": "JL KECAPL V",
-    "rt_rw": "2008 / 005",
-    "kelurahan_desa": "DAGAKARSA",
+    "birth_date": "24-12-1980",
+    "birth_place": "JAKARTA",
+    "city": "JAKARTA SELATAN",
+    "gender": "Not found",
     "kecamatan": "JAGAKARSA",
-    "religion": "ZISLAM",
+    "kelurahan_desa": "DAGAKARSA",
     "marital_status": "BELUM KAWIN",
-    "occupation": "KARYAWAN SWASTA SAKARTA SELATAN",
-    "nationality": "WNI",
-    "valid_until": "21-12-2016"
-  }
+    "name": "AKU",
+    "nik": "0074096112900001",
+    "province": "DKI JAKARTA",
+    "religion": "ZISLAM",
+    "rt_rw": "2008 / 005"
+  },
+  "valid": false,
+  "timestamp": "..."
 }
 ```
 > Beberapa nilai dapat tetap "Not found" bila bahasa/data latih Tesseract belum terpasang atau kualitas gambar kurang baik. Setelah `ind.traineddata` terpasang, akurasi label seperti jenis kelamin dan golongan darah meningkat.
@@ -136,4 +163,3 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 - Tambah dukungan format KTP model terbaru (e-KTP dengan QR code).
 - Normalisasi hasil (title case, format tanggal ISO).
 - Tambah test suite + dataset contoh untuk regresi otomatis.
-

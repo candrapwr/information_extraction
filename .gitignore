@@ -20,3 +20,6 @@ temp_*.jpg
 
 # Matplotlib cache dir if set locally
 mpl-cache/
+
+# Local configuration (copy from config.example.yaml)
+config/config.yaml

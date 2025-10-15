@@ -1,0 +1,92 @@
+tesseract:
+  path: "/opt/homebrew/bin/tesseract"  # Adjust to your Tesseract path
+  lang: "eng+ind"            # OCR languages (English + Indonesian)
+ocr:
+  confidence_threshold: 0.6  # Confidence threshold for OCR results
+  default_provider: "pytesseract"  # pytesseract | easyocr | llm
+preprocess:
+  max_width: 800            # Downscale if width exceeds this (pixels)
+  max_height: 800           # Downscale if height exceeds this (pixels)
+  max_filesize_mb: 1         # Downscale if original file exceeds this size
+  jpeg_quality: 100           # Quality for saved preprocessed image
+  clahe_clip: 2.0            # CLAHE clip limit
+  clahe_grid: [8, 8]         # CLAHE tile grid size
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+easyocr:
+  lang:
+    - id
+    - en
+  gpu: false
+llm:
+  endpoint: "https://generativelanguage.googleapis.com/v1beta"
+  model: "gemini-2.0-flash"
+  api_key: ""  # Set this environment variable with your API key
+  timeout: 30
+  dummy_response: "{}"
+  prompts:
+    ktp: |-
+      You are an AI that only outputs raw JSON. Never include explanations, markdown formatting, or any other text. Do not wrap the response in code fences. Return only a valid JSON object.
+
+      Expected JSON schema (all keys present, string or null values):
+      {
+        "address": ...,
+        "birth_date": ...,
+        "birth_place": ...,
+        "city": ...,
+        "gender": ...,
+        "kecamatan": ...,
+        "kelurahan_desa": ...,
+        "marital_status": ...,
+        "name": ...,
+        "nik": ...,
+        "province": ...,
+        "religion": ...,
+        "rt_rw": ...
+      }
+
+    passport: |-
+      You are a passport data extractor. Read the document in its standard orientation and capture fields from the Machine Readable Zone (MRZ) and visual inspection zones. Respond with only a single JSON object using the schema below; use `null` for unreadable fields.
+
+      Required JSON schema:
+      {
+        "passport_number": ...,
+        "name": ...,
+        "nationality": ...,
+        "date_of_birth": ...,
+        "gender": ...,
+        "expiration_date": ...,
+        "country_code": ...
+      }
+
+      Extraction instructions:
+      - Prioritize MRZ lines (bottom of ID page). If MRZ is missing, fall back to printed text in the data page.
+      - `passport_number`: characters after the country code in MRZ line 1, before the check digit. Remove spaces; keep leading zeros. Must match exactly.
+      - `name`: combine MRZ primary and secondary identifiers (surname then given names) separated by a single space, converting `<<` to spaces. Uppercase result. If MRZ unavailable, use the printed name block.
+      - `nationality`: three-letter code (`nationality` field in MRZ line 2). Uppercase.
+      - `date_of_birth`: digits from MRZ line 2. Convert `YYMMDD` to `DD-MM-YYYY` (assume 1900–1999 if year ≥ 30 else 2000–2099 unless context suggests otherwise). Null if any digit missing.
+      - `gender`: single letter from MRZ (`M`, `F`, or `<`). Map `<` to null, others to uppercase letter.
+      - `expiration_date`: digits from MRZ line 2 (`YYMMDD` → `DD-MM-YYYY` with same century rule as above).
+      - `country_code`: three-letter issuing country code at start of MRZ line 1 (e.g., `IDN`). Uppercase.
+      - Never guess; if characters are partially obscured, return null.
+      - Ignore decorative text, visas, or stamps.
+
+      Output only the JSON object, no additional text.
+templates:
+  ktp:
+    fields:
+      address: "Alamat\\s*[:=]\\s*([A-Z0-9\\s/.,-]+)"
+      birth_date: "Tempat/Tgl Lahir\\s*[:=][^0-9]*(\\d{2}-\\d{2}-\\d{4})"
+      birth_place: "Tempat/Tgl Lahir\\s*[:=]\\s*([A-Z\\s]+),"
+      city: "(?:KABUPATEN|KOTA)\\s*([A-Z\\s]+)"
+      gender: "Jenis Kelamin\\s*[:=]\\s*([A-Z]+)"
+      kecamatan: "Kecamatan\\s*[:=]\\s*([A-Z\\s]+)"
+      kelurahan_desa: "Kel/?Desa\\s*[:=]\\s*([A-Z\\s]+)"
+      marital_status: "Status Perkawinan\\s*[:=]\\s*([A-Z\\s]+)"
+      name: "Nama\\s*[:=]\\s*([A-Z\\s]+)"
+      nik: "NIK\\s*[:=]\\s*(\\d{16})"
+      province: "PROVINSI\\s*([A-Z\\s]+)"
+      religion: "Agama\\s*[:=]\\s*([A-Z\\s]+)"
+      rt_rw: "RT/?RW\\s*[:=]\\s*([0-9\\s/-]+)"

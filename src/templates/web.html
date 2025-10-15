@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dokumen OCR</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; max-width: 720px; }
+    h1 { margin-bottom: 1rem; }
+    form { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; }
+    label { font-weight: bold; }
+    input[type="file"], select { padding: 0.4rem; }
+    button { padding: 0.6rem 1rem; cursor: pointer; }
+    .alert { padding: 0.75rem 1rem; border-radius: 4px; margin-bottom: 1.5rem; }
+    .alert.error { background-color: #fdecea; color: #b71c1c; border: 1px solid #f5c6cb; }
+    .alert.success { background-color: #e7f6ed; color: #1b5e20; border: 1px solid #c8e6c9; }
+    pre { background-color: #f7f7f7; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .metadata { font-size: 0.9rem; color: #555; margin-top: -1rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Ekstraksi Informasi Dokumen</h1>
+  <form method="post" enctype="multipart/form-data">
+    <div>
+      <label for="file">Berkas Gambar</label><br>
+      <input id="file" type="file" name="file" accept="image/*" required>
+    </div>
+    <div>
+      <label for="doc_type">Tipe Dokumen</label><br>
+      <select id="doc_type" name="type">
+        {% for option in doc_types %}
+        <option value="{{ option }}" {% if option == selected_doc_type %}selected{% endif %}>{{ option|upper }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="provider">Engine OCR</label><br>
+      <select id="provider" name="provider">
+        {% for option in providers %}
+        <option value="{{ option }}" {% if option == selected_provider %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">Proses</button>
+  </form>
+
+  {% if error %}
+  <div class="alert error">{{ error }}</div>
+  {% endif %}
+
+  {% if result %}
+  <div class="alert success">Ekstraksi berhasil.</div>
+  {% if timestamp %}
+  <div class="metadata">Timestamp: {{ timestamp }}</div>
+  {% endif %}
+  {% if is_valid is not none %}
+  <div class="metadata">Valid: {{ 'true' if is_valid else 'false' }}</div>
+  {% endif %}
+  <h2>Data</h2>
+  <pre>{{ result | tojson(indent=2) }}</pre>
+  {% if usage %}
+  <h3>Usage</h3>
+  <pre>{{ usage | tojson(indent=2) }}</pre>
+  {% endif %}
+  {% endif %}
+</body>
+</html>

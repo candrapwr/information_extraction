@@ -127,10 +127,9 @@ def _default_prompt(doc_type: str) -> str:
     return (
         f"{base_instruction}\n\n"
         "Extract the following fields from the Indonesian KTP image:\n"
-        "- province\n- city\n- nik\n- name\n- birth_place\n- birth_date\n"
-        "- gender\n- blood_type\n- address\n- rt_rw\n- kelurahan_desa\n"
-        "- kecamatan\n- religion\n- marital_status\n- occupation\n- nationality\n"
-        "- valid_until\nIf any field is missing or unreadable, set its value to null."
+        "- address\n- birth_date\n- birth_place\n- city\n- gender\n"
+        "- kecamatan\n- kelurahan_desa\n- marital_status\n- name\n- nik\n"
+        "- province\n- religion\n- rt_rw\nIf any field is missing or unreadable, set its value to null."
     )
 
 

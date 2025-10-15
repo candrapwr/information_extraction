@@ -4,23 +4,29 @@ from difflib import SequenceMatcher
 import yaml
 
 KTP_FIELDS = [
-    "province",
-    "city",
-    "nik",
-    "name",
-    "birth_place",
-    "birth_date",
-    "gender",
-    "blood_type",
     "address",
-    "rt_rw",
-    "kelurahan_desa",
+    "birth_date",
+    "birth_place",
+    "city",
+    "gender",
     "kecamatan",
-    "religion",
+    "kelurahan_desa",
     "marital_status",
-    "occupation",
+    "name",
+    "nik",
+    "province",
+    "religion",
+    "rt_rw",
+]
+
+PASSPORT_FIELDS = [
+    "passport_number",
+    "name",
     "nationality",
-    "valid_until",
+    "date_of_birth",
+    "gender",
+    "expiration_date",
+    "country_code",
 ]
 
 FIELD_VARIANTS = {
@@ -30,16 +36,57 @@ FIELD_VARIANTS = {
     "name": [["NAMA"]],
     "birth": [["TEMPAT", "TGL", "LAHIR"], ["TEMPAT", "LAHIR"], ["TEMPATL", "LAHIR"], ["TEMPALTGL", "LAHIR"], ["TEMPATTGL", "LAHIR"], ["TEMPAT/TGL", "LAHIR"]],
     "gender": [["JENIS", "KELAMIN"], ["JNS", "KELAMIN"], ["JENIS", "KEL"]],
-    "blood_type": [["GOL", "DARAH"], ["GOL", "DRAH"], ["GOL", "DRH"], ["GOLDARAH"]],
     "address": [["ALAMAT"], ["ALMAT"], ["ALAMAT"], ["ALAMAT"], ["ALANAT"], ["ATOMAT"], ["ALAMAP"]],
     "rt_rw": [["RT/RW"], ["RT", "RW"], ["RTRW"], ["RT", "TRW"]],
     "kelurahan_desa": [["KEL", "DESA"], ["KELURAHAN"], ["DESA"], ["KELDESA"], ["KEL/ DESA"], ["KEL/DEEA"], ["KEL/DESA"]],
     "kecamatan": [["KECAMATAN"], ["KEC"]],
     "religion": [["AGAMA"], ["AGAM"]],
     "marital_status": [["STATUS", "PERKAWIN"], ["STATUS", "KAWIN"], ["STATUS", "PERK"]],
-    "occupation": [["PEKERJAAN"], ["PEKERJN"], ["PEKERJA"]],
-    "nationality": [["KEWARGANEGARAAN"], ["KEWARGANEGARAN"], ["KEWARGANEG"]],
-    "valid_until": [["BERLAKU", "HINGGA"], ["BERLAKU"], ["BERLAK"], ["BERLAKU", "H"], ["BERLKU", "HINGGA"]],
+}
+
+_BLOCK_KEYWORDS = {
+    "PROVINSI",
+    "KOTA",
+    "KABUPATEN",
+    "KOTAMADYA",
+    "NIK",
+    "NAMA",
+    "TEMPAT",
+    "TGL",
+    "LAHIR",
+    "JENIS",
+    "KELAMIN",
+    "GOL",
+    "DARAH",
+    "ALAMAT",
+    "RT",
+    "RW",
+    "KELDESA",
+    "KEL",
+    "DESA",
+    "KECAMATAN",
+    "AGAMA",
+    "STATUS",
+    "PERKAWINAN",
+    "PEKERJAAN",
+    "KEWARGANEGARAAN",
+    "BERLAKU",
+    "PEREMPUAN",
+    "WANITA",
+    "PRIA",
+    "LAKI",
+    "POKERJAAN",
+}
+
+_RELIGION_KEYWORDS = {
+    "ISLAM",
+    "KRISTEN",
+    "PROTESTAN",
+    "KATOLIK",
+    "HINDU",
+    "BUDDHA",
+    "KONGHUCU",
+    "KEPERCAYAAN",
 }
 
 
@@ -116,21 +163,169 @@ def _find_first_matching_line(lines, start_idx):
     return None
 
 
+def _iter_following_lines(lines, start_idx, max_offset=6):
+    for offset in range(1, max_offset + 1):
+        next_idx = start_idx + offset
+        if next_idx >= len(lines):
+            break
+        candidate = lines[next_idx].strip()
+        if candidate:
+            yield candidate
+
+
+def _is_probable_label(line: str) -> bool:
+    tokens, cleaned = _tokens_with_clean(line)
+    if not tokens:
+        return False
+    for variants in FIELD_VARIANTS.values():
+        for variant in variants:
+            if _match_label(cleaned, variant) is not None:
+                return True
+    return False
+
+
+def _contains_block_keyword(text: str) -> bool:
+    tokens = re.split(r"\s+", text.upper())
+    for tok in tokens:
+        cleaned = re.sub(r"[^A-Z]", "", tok)
+        if cleaned and any(block in cleaned for block in _BLOCK_KEYWORDS):
+            return True
+    return False
+
+
+def _candidate_value_for(field: str, line: str):
+    raw = line.strip()
+    stripped = raw.lstrip(" :=-")
+    stripped = re.sub(r"^[^A-Z0-9]+", "", stripped)
+    if not stripped:
+        return None
+    if _is_probable_label(stripped):
+        return None
+    upper = stripped.upper()
+    if field == "nik":
+        digits = re.findall(r"\d{16}", re.sub(r"[^0-9]", "", stripped))
+        if digits:
+            return max(digits, key=len)
+        digits = re.findall(r"\d{4,}", stripped)
+        if digits:
+            return max(digits, key=len)
+    elif field == "name":
+        candidate = re.sub(r"^[^A-Z]+", "", stripped)
+        upper_candidate = candidate.upper()
+        if candidate and not _contains_block_keyword(upper_candidate) and not any(char.isdigit() for char in candidate) and len(candidate) >= 3:
+            return candidate
+    elif field == "gender":
+        match = re.search(r"(LAKI[-\s]*LAKI|PEREMPUAN|PRIA|WANITA|LAKI|L|P)", upper)
+        if match:
+            token = match.group(1)
+            if token in {"L", "LAKI"}:
+                token = "LAKI-LAKI"
+            if token == "P":
+                token = "PEREMPUAN"
+            return token
+    elif field == "address":
+        if not _contains_block_keyword(upper) and (upper.startswith(("JL", "JLN", "JALAN")) or any(char.isdigit() for char in stripped) or len(stripped) >= 10):
+            return stripped
+    elif field == "rt_rw":
+        match = re.search(r"(\d{1,3})\s*[/|-]\s*(\d{1,3})", stripped)
+        if match:
+            return f"{match.group(1)}/{match.group(2)}"
+    elif field in {"kelurahan_desa", "kecamatan"}:
+        candidate = re.sub(r"[^A-Z\s]", "", upper).strip()
+        if candidate:
+            tokens = [tok for tok in candidate.split() if tok]
+            if any(tok in {"JL", "JALAN", "JLN"} for tok in tokens):
+                return None
+            if not _contains_block_keyword(candidate) and len(candidate) >= 3 and len(tokens) <= 3:
+                return candidate
+    elif field == "religion":
+        token = re.sub(r"[^A-Z]", "", upper)
+        if token:
+            for keyword in _RELIGION_KEYWORDS:
+                if keyword in token:
+                    return keyword
+        return None
+    elif field == "marital_status":
+        candidate = re.sub(r"[^A-Z\s]", "", upper).strip()
+        if candidate and not _contains_block_keyword(candidate) and not any(char.isdigit() for char in candidate):
+            return candidate
+    return None
+
+
+def _should_replace(field: str, existing: str, new_value: str, record: dict) -> bool:
+    if not existing or existing == "Not found":
+        return True
+    if existing == new_value:
+        return False
+    if _contains_block_keyword(existing):
+        return True
+    if field == "name":
+        keywords = {"PROVINSI", "KOTA", "KABUPATEN", "KOTAMADYA"}
+        if any(keyword in existing for keyword in keywords) and not any(keyword in new_value for keyword in keywords):
+            return True
+        if len(new_value.split()) >= 2 and len(existing.split()) <= 1:
+            return True
+        city = record.get("city")
+        if city and existing == city and new_value != city:
+            return True
+    if field in {"kelurahan_desa", "kecamatan"}:
+        if any(keyword in existing for keyword in {"JL", "JALAN"}) and not any(keyword in new_value for keyword in {"JL", "JALAN"}):
+            return True
+    if field == "address":
+        if not any(char.isdigit() for char in existing) and any(char.isdigit() for char in new_value):
+            return True
+    return False
+
+
 def _heuristic_parse_ktp(text: str) -> dict:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     data = {}
     province_idx = None
+    pending_fields = []
 
     def store(field, value):
-        if value and field not in data:
-            normalized = _normalize_whitespace(value)
-            if any(char.isalpha() for char in normalized):
-                normalized = normalized.upper()
+        if not value:
+            return
+        normalized = _normalize_whitespace(value)
+        if any(char.isalpha() for char in normalized):
+            normalized = normalized.upper()
+        existing = data.get(field)
+        if not existing or _should_replace(field, existing, normalized, data):
             data[field] = normalized
+        if field in pending_fields:
+            pending_fields.remove(field)
+
+    def queue_pending(field):
+        if field not in data and field not in pending_fields:
+            pending_fields.append(field)
 
     for idx, line in enumerate(lines):
+        for field in pending_fields[:]:
+            candidate_value = _candidate_value_for(field, line)
+            if candidate_value:
+                if field == "kecamatan" and data.get("kelurahan_desa") == candidate_value:
+                    continue
+                store(field, candidate_value)
+                if field in pending_fields:
+                    pending_fields.remove(field)
+
         tokens, cleaned = _tokens_with_clean(line)
         upper_line = re.sub(r"[^A-Z0-9/,:=\-\s]", "", line.upper())
+
+        if "religion" not in data:
+            upper_compact = re.sub(r"[^A-Z]", "", upper_line)
+            for keyword in _RELIGION_KEYWORDS:
+                if upper_compact == keyword:
+                    store("religion", keyword)
+                    break
+
+        existing_name = data.get("name")
+        if existing_name:
+            city_value = data.get("city")
+            if (city_value and existing_name == city_value) or _contains_block_keyword(existing_name):
+                candidate = _candidate_value_for("name", line)
+                if candidate and candidate != existing_name:
+                    store("name", candidate)
 
         if any(_match_label(cleaned, variant) is not None for variant in FIELD_VARIANTS["province"]):
             variant = next(variant for variant in FIELD_VARIANTS["province"] if _match_label(cleaned, variant) is not None)
@@ -157,11 +352,30 @@ def _heuristic_parse_ktp(text: str) -> dict:
                         if cleaned_candidate and cleaned_candidate == cleaned_candidate.upper() and not any(char.isdigit() for char in cleaned_candidate):
                             store("name", cleaned_candidate)
                             break
+            else:
+                for candidate in _iter_following_lines(lines, idx, max_offset=6):
+                    if _is_probable_label(candidate):
+                        continue
+                    candidate_digits = re.findall(r"\d{4,}", candidate)
+                    if candidate_digits:
+                        store("nik", max(candidate_digits, key=len))
+                        break
+                if "name" not in data:
+                    for candidate in _iter_following_lines(lines, idx, max_offset=6):
+                        if _is_probable_label(candidate):
+                            continue
+                        cleaned_candidate = candidate.lstrip(":= ").strip()
+                        if cleaned_candidate and cleaned_candidate == cleaned_candidate.upper() and not any(char.isdigit() for char in cleaned_candidate):
+                            store("name", cleaned_candidate)
+                            break
 
         if any(_match_label(cleaned, variant) is not None for variant in FIELD_VARIANTS["name"]):
             variant = next(variant for variant in FIELD_VARIANTS["name"] if _match_label(cleaned, variant) is not None)
             value = _extract_after_tokens(line, variant)
-            store("name", value or line)
+            if value:
+                store("name", value)
+            else:
+                queue_pending("name")
 
         birth_variant = None
         for variant in FIELD_VARIANTS["birth"]:
@@ -184,12 +398,27 @@ def _heuristic_parse_ktp(text: str) -> dict:
                     store("birth_place", match.group(1).strip().replace("TEMPAT", "").strip())
                     store("birth_date", match.group(2))
 
+        gender_variant = None
+        for variant in FIELD_VARIANTS["gender"]:
+            if _match_label(cleaned, variant) is not None:
+                gender_variant = variant
+                break
+        if gender_variant:
+            value = _extract_after_tokens(line, gender_variant)
+            if value:
+                store("gender", value)
+            else:
+                for candidate in _iter_following_lines(lines, idx, max_offset=6):
+                    if _is_probable_label(candidate):
+                        continue
+                    match = re.search(r"(LAKI[-\s]*LAKI|PEREMPUAN|PRIA|WANITA|LAKI-LAKI|LAKI LAKI|PEREMPUAN|LAKI|L|P)", candidate.upper())
+                    if match:
+                        store("gender", match.group(1))
+                        break
+                queue_pending("gender")
         gender_match = re.search(r"JENIS\s*KELAMIN[^A-Z0-9]+([A-Z]+)", upper_line)
         if gender_match:
             store("gender", gender_match.group(1))
-        blood_match = re.search(r"GOL\s*DARAH[^A-Z0-9]+([A-Z0-9+-]+)", upper_line)
-        if blood_match:
-            store("blood_type", blood_match.group(1))
 
         address_variant = None
         for variant in FIELD_VARIANTS["address"]:
@@ -198,7 +427,10 @@ def _heuristic_parse_ktp(text: str) -> dict:
                 break
         if address_variant:
             value = _extract_after_tokens(line, address_variant)
-            store("address", value)
+            if value:
+                store("address", value)
+            else:
+                queue_pending("address")
 
         rt_variant = None
         for variant in FIELD_VARIANTS["rt_rw"]:
@@ -211,7 +443,10 @@ def _heuristic_parse_ktp(text: str) -> dict:
                 digits = re.findall(r"\d{1,3}", upper_line)
                 if len(digits) >= 2:
                     value = f"{digits[0]}/{digits[1]}"
-            store("rt_rw", value)
+            if value:
+                store("rt_rw", value)
+            else:
+                queue_pending("rt_rw")
 
         kel_variant = None
         for variant in FIELD_VARIANTS["kelurahan_desa"]:
@@ -220,7 +455,10 @@ def _heuristic_parse_ktp(text: str) -> dict:
                 break
         if kel_variant:
             value = _extract_after_tokens(line, kel_variant)
-            store("kelurahan_desa", value)
+            if value:
+                store("kelurahan_desa", value)
+            else:
+                queue_pending("kelurahan_desa")
 
         kec_variant = None
         for variant in FIELD_VARIANTS["kecamatan"]:
@@ -229,7 +467,10 @@ def _heuristic_parse_ktp(text: str) -> dict:
                 break
         if kec_variant:
             value = _extract_after_tokens(line, kec_variant)
-            store("kecamatan", value)
+            if value:
+                store("kecamatan", value)
+            else:
+                queue_pending("kecamatan")
 
         religion_variant = None
         for variant in FIELD_VARIANTS["religion"]:
@@ -238,7 +479,10 @@ def _heuristic_parse_ktp(text: str) -> dict:
                 break
         if religion_variant:
             value = _extract_after_tokens(line, religion_variant)
-            store("religion", value)
+            if value:
+                store("religion", value)
+            else:
+                queue_pending("religion")
 
         marital_variant = None
         for variant in FIELD_VARIANTS["marital_status"]:
@@ -247,37 +491,10 @@ def _heuristic_parse_ktp(text: str) -> dict:
                 break
         if marital_variant:
             value = _extract_after_tokens(line, marital_variant)
-            store("marital_status", value)
-
-        occupation_variant = None
-        for variant in FIELD_VARIANTS["occupation"]:
-            if _match_label(cleaned, variant) is not None:
-                occupation_variant = variant
-                break
-        if occupation_variant:
-            value = _extract_after_tokens(line, occupation_variant)
-            store("occupation", value)
-
-        nationality_variant = None
-        for variant in FIELD_VARIANTS["nationality"]:
-            if _match_label(cleaned, variant) is not None:
-                nationality_variant = variant
-                break
-        if nationality_variant:
-            value = _extract_after_tokens(line, nationality_variant)
             if value:
-                store("nationality", value.split()[0])
-
-        valid_variant = None
-        for variant in FIELD_VARIANTS["valid_until"]:
-            if _match_label(cleaned, variant) is not None:
-                valid_variant = variant
-                break
-        if valid_variant:
-            value = _extract_after_tokens(line, valid_variant)
-            if value:
-                date_match = re.search(r"\d{2}-\d{2}-\d{4}", value)
-                store("valid_until", date_match.group(0) if date_match else value)
+                store("marital_status", value)
+            else:
+                queue_pending("marital_status")
 
     if province_idx is not None and "city" not in data:
         candidate = _find_first_matching_line(lines, province_idx + 1)
@@ -303,6 +520,31 @@ def _heuristic_parse_ktp(text: str) -> dict:
             store("birth_date", date)
 
     return data
+
+
+def _is_field_present(value):
+    if value is None:
+        return False
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return False
+        if normalized.lower() == "not found":
+            return False
+    return True
+
+
+def validate_result(data, doc_type):
+    """Return True when all expected fields are present with meaningful values."""
+    if not isinstance(data, dict):
+        return False
+    fields = []
+    doc_type_lower = (doc_type or "").lower()
+    if doc_type_lower == "passport":
+        fields = PASSPORT_FIELDS
+    else:
+        fields = KTP_FIELDS
+    return all(_is_field_present(data.get(field)) for field in fields)
 
 def load_config(config_path="config/config.yaml"):
     """Load configuration from YAML file."""

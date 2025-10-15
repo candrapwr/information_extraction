@@ -7,6 +7,7 @@ from src.parser import (
     normalize_ktp_result,
     parse_ktp,
     parse_passport,
+    validate_result,
 )
 import json
 
@@ -26,9 +27,10 @@ def main(image_path, doc_type="ktp", provider=None):
         
         # Extract and parse data
         usage = None
+        doc_type_normalized = (doc_type or "ktp").lower()
         if provider == "llm":
-            result, usage = extract_llm_data(image_path, doc_type, config)
-            if doc_type.lower() == "ktp":
+            result, usage = extract_llm_data(image_path, doc_type_normalized, config)
+            if doc_type_normalized == "ktp":
                 result = normalize_ktp_result(result)
         else:
             text = extract_text(
@@ -37,16 +39,19 @@ def main(image_path, doc_type="ktp", provider=None):
                 provider=provider,
                 config=config,
             )
-            if doc_type == "passport":
+            if doc_type_normalized == "passport":
                 mrz_data = extract_mrz(ocr_input_path)
                 result = parse_passport(mrz_data, text)
             else:
                 result = parse_ktp(text, config)
 
+        is_valid = validate_result(result, doc_type_normalized)
+
         # Output JSON
         output = {
             "status": "success",
             "data": result,
+            "valid": is_valid,
             "timestamp": datetime.now().astimezone().isoformat()
         }
         if usage:
