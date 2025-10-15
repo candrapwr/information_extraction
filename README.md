@@ -83,7 +83,7 @@ Keluaran berupa JSON yang mencakup status, data hasil ekstraksi, indikator `vali
 ```bash
 python src/api.py
 ```
-Buka browser ke `http://localhost:8000/` (atau port sesuai konfigurasi). Form web memungkinkan Anda memilih berkas gambar, tipe dokumen (`ktp`/`passport`), serta engine OCR (`pytesseract`, `easyocr`, `llm`). Hasil ekstraksi akan tampil sebagai JSON pada halaman yang sama.
+Buka browser ke `http://localhost:8000/` (atau port sesuai konfigurasi). Form web memungkinkan Anda memilih berkas gambar, tipe dokumen (`ktp`/`passport`), serta engine OCR (`pytesseract`, `easyocr`, `llm`). Hasil ekstraksi akan tampil sebagai JSON pada halaman yang sama, dan tersedia tautan unduhan koleksi Postman untuk mencoba endpoint API.
 
 ### Contoh Keluaran KTP
 ```json
@@ -133,6 +133,31 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 
 **Port & host:** ubah lewat `config.yaml` (`server.host`, `server.port`, `server.debug`) atau override port/debug sementara via environment variable `OCR_API_PORT` dan `OCR_API_DEBUG` sebelum menjalankan `python src/api.py`.
 
+### Koleksi Postman
+- Koleksi tersedia di `postman/information_extraction.postman_collection.json`.
+- Antarmuka web (`/`) menyediakan tombol unduhan langsung, atau impor file tersebut secara manual ke Postman untuk mencoba endpoint `POST /extract`.
+
+## Ubuntu 24.04 Notes
+### Menjalankan Aplikasi
+```bash
+sudo apt-get update
+sudo apt-get install python3-venv python3-pip tesseract-ocr tesseract-ocr-ind
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+python src/api.py
+```
+
+### Firewall & Akses Publik
+Jika menggunakan UFW pada Ubuntu 24.04:
+```bash
+sudo ufw allow 8000/tcp  # atau port sesuai konfigurasi
+sudo ufw status
+```
+Pastikan aplikasi dijalankan dengan `host` yang dapat diakses publik (misal `0.0.0.0`) dan, bila di cloud, buka port pada security group / network rules penyedia.
+
+Untuk akses TLS/production, combo populer adalah menjalankan aplikasi di belakang reverse proxy (misal Nginx) dan memforward port 80/443 ke aplikasi Flask.
+
 ## Mode OCR
 - **pytesseract**: mode default yang memanfaatkan instalasi Tesseract lokal. Pastikan `tesseract.path` dan `tesseract.lang` sudah benar.
 - **easyocr**: gunakan ketika ingin memanfaatkan model EasyOCR. Atur daftar bahasa dan opsi GPU di `config.yaml`.
@@ -163,3 +188,11 @@ Respons API mengikuti format JSON yang sama dengan CLI.
 - Tambah dukungan format KTP model terbaru (e-KTP dengan QR code).
 - Normalisasi hasil (title case, format tanggal ISO).
 - Tambah test suite + dataset contoh untuk regresi otomatis.
+
+## Author
+- Candra Rudy  
+- Website: [datasiber.com](https://datasiber.com)  
+- Email: [candrapwr@datasiber.com](mailto:candrapwr@datasiber.com)
+
+## License
+Proyek ini dirilis di bawah lisensi [MIT](LICENSE).

@@ -3,10 +3,11 @@ import sys
 import tempfile
 from datetime import datetime
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory, url_for
 
 # Allow running the script directly via `python src/api.py`
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+src_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(src_root)
 
 from src.preprocess import preprocess_image
 from src.ocr import extract_text, extract_mrz, extract_llm_data
@@ -19,6 +20,7 @@ from src.parser import (
 )
 
 app = Flask(__name__)
+BASE_DIR = src_root
 
 
 def _process_document(image_path, doc_type, provider, config):
@@ -172,6 +174,17 @@ def web_form():
         error=error,
         timestamp=timestamp,
         is_valid=is_valid,
+        postman_url=url_for("download_postman_collection"),
+    )
+
+
+@app.route("/downloads/postman", methods=["GET"])
+def download_postman_collection():
+    """Serve the Postman collection for the API."""
+    return send_from_directory(
+        os.path.join(BASE_DIR, "postman"),
+        "information_extraction.postman_collection.json",
+        as_attachment=True,
     )
 
 if __name__ == '__main__':

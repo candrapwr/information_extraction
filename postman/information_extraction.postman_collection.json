@@ -1,0 +1,53 @@
+{
+  "info": {
+    "name": "Information Extraction API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Sample requests for the KTP & Passport OCR API."
+  },
+  "item": [
+    {
+      "name": "Extract Document Data",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": ""
+            },
+            {
+              "key": "type",
+              "type": "text",
+              "value": "ktp"
+            },
+            {
+              "key": "provider",
+              "type": "text",
+              "value": "pytesseract"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/extract",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "extract"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    }
+  ]
+}
