@@ -48,7 +48,7 @@ def preprocess_image(image_path, config=None, provider=None):
         return temp_path
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    filtered = cv2.bilateralFilter(gray, 9, 80, 80)
+    filtered = cv2.bilateralFilter(gray, 9, 75, 75)
     adaptive = cv2.adaptiveThreshold(filtered, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 11)
 
     temp_path = "temp_preprocessed.jpg"
