@@ -90,6 +90,49 @@ _RELIGION_KEYWORDS = {
 }
 
 
+def _format_date_from_tokens(text: str):
+    match = re.search(r"(\d{1,2})\D*(\d{1,2})\D*(\d{4})", text)
+    if not match:
+        return None
+    day, month, year = match.groups()
+    day = day.zfill(2)
+    month = month.zfill(2)
+    return f"{day}-{month}-{year}"
+
+
+def _normalize_gender(value: str) -> str:
+    if not value:
+        return value
+    token = re.sub(r"[^A-Z]", "", value.upper())
+    if token in {"LAKILAKI", "LAKLAKI", "LAKI"}:
+        return "LAKI-LAKI"
+    if token in {"PEREMPUAN", "WANITA", "P"}:
+        return "PEREMPUAN"
+    return value.upper()
+
+
+def _normalize_marital_status(value: str) -> str:
+    if not value:
+        return value
+    cleaned = value.upper().replace(" ", "")
+    mapping = {
+        "BELUMKAWIN": "BELUM KAWIN",
+        "KAWIN": "KAWIN",
+        "CERAIHIDUP": "CERAI HIDUP",
+        "CERAIMATI": "CERAI MATI",
+    }
+    return mapping.get(cleaned, value.upper())
+
+
+def _normalize_rt_rw(value: str) -> str:
+    if not value:
+        return value
+    match = re.search(r"(\d{1,3})\D+(\d{1,3})", value)
+    if match:
+        return f"{match.group(1).zfill(3)}/{match.group(2).zfill(3)}"
+    return value
+
+
 def _normalize_whitespace(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
@@ -385,18 +428,34 @@ def _heuristic_parse_ktp(text: str) -> dict:
         if birth_variant:
             value = _extract_after_tokens(line, birth_variant)
             if value:
+                value = value.replace(";", ",")
                 parts = [part.strip() for part in value.split(",") if part.strip()]
                 if parts:
                     store("birth_place", parts[0])
                 if len(parts) > 1:
-                    date_match = re.search(r"\d{2}-\d{2}-\d{4}", parts[1])
-                    if date_match:
-                        store("birth_date", date_match.group(0))
+                    formatted = _format_date_from_tokens(parts[1])
+                    if formatted:
+                        store("birth_date", formatted)
             else:
-                match = re.search(r"([A-Z\s]+),\s*(\d{2}-\d{2}-\d{4})", upper_line)
+                match = re.search(r"([A-Z\s]+),\s*([0-9\s/.-]+)", upper_line)
                 if match:
                     store("birth_place", match.group(1).strip().replace("TEMPAT", "").strip())
-                    store("birth_date", match.group(2))
+                    formatted = _format_date_from_tokens(match.group(2))
+                    if formatted:
+                        store("birth_date", formatted)
+                queue_pending("birth_place")
+                queue_pending("birth_date")
+                for candidate in _iter_following_lines(lines, idx, max_offset=4):
+                    if "birth_place" not in data:
+                        candidate_place = re.sub(r"[^A-Z\s]", "", candidate.upper()).strip()
+                        if candidate_place and len(candidate_place) >= 3 and "LAHIR" not in candidate_place:
+                            store("birth_place", candidate_place)
+                    if "birth_date" not in data:
+                        formatted = _format_date_from_tokens(candidate)
+                        if formatted:
+                            store("birth_date", formatted)
+                    if "birth_place" in data and "birth_date" in data:
+                        break
 
         gender_variant = None
         for variant in FIELD_VARIANTS["gender"]:
@@ -510,14 +569,16 @@ def _heuristic_parse_ktp(text: str) -> dict:
                 break
 
     if "birth_date" not in data or "birth_place" not in data:
-        match = re.search(r"([A-Z\s]{3,}),\s*(\d{2}-\d{2}-\d{4})", re.sub(r"[^A-Z0-9,\s-]", "", text.upper()))
+        sanitized = re.sub(r"[^A-Z0-9,\s/.-]", "", text.upper())
+        match = re.search(r"([A-Z\s]{3,}),\s*([0-9\s/.-]+)", sanitized)
         if match:
             place = match.group(1).strip()
-            date = match.group(2)
+            date = _format_date_from_tokens(match.group(2))
             if "TEMPAT" in place:
                 place = place.split()[-1]
             store("birth_place", place)
-            store("birth_date", date)
+            if date:
+                store("birth_date", date)
 
     return data
 
@@ -582,7 +643,19 @@ def normalize_ktp_result(data):
             continue
         if isinstance(raw_value, str):
             value = raw_value.strip()
-            normalized[field] = value if value else "Not found"
+            if not value:
+                normalized[field] = "Not found"
+                continue
+            if field == "gender":
+                value = _normalize_gender(value)
+            elif field == "marital_status":
+                value = _normalize_marital_status(value)
+            elif field == "rt_rw":
+                value = _normalize_rt_rw(value)
+            elif field == "birth_date":
+                formatted = _format_date_from_tokens(value)
+                value = formatted or value
+            normalized[field] = value
         else:
             normalized[field] = raw_value
     return normalized

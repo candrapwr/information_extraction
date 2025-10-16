@@ -21,8 +21,8 @@ def main(image_path, doc_type="ktp", provider=None):
 
         # Preprocess image when using OCR engines that benefit from it
         preprocessed_path = None
-        if provider != "llm":
-            preprocessed_path = preprocess_image(image_path, config=config)
+        if provider == "pytesseract":
+            preprocessed_path = preprocess_image(image_path, config=config, provider=provider)
         ocr_input_path = preprocessed_path or image_path
         
         # Extract and parse data
@@ -43,7 +43,7 @@ def main(image_path, doc_type="ktp", provider=None):
                 mrz_data = extract_mrz(ocr_input_path)
                 result = parse_passport(mrz_data, text)
             else:
-                result = parse_ktp(text, config)
+                result = normalize_ktp_result(parse_ktp(text, config))
 
         is_valid = validate_result(result, doc_type_normalized)
 

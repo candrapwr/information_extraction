@@ -31,8 +31,8 @@ def _process_document(image_path, doc_type, provider, config):
     provider_normalized = (provider or default_provider).lower()
 
     preprocessed_path = None
-    if provider_normalized != 'llm':
-        preprocessed_path = preprocess_image(image_path, config=cfg)
+    if provider_normalized == 'pytesseract':
+        preprocessed_path = preprocess_image(image_path, config=cfg, provider=provider_normalized)
     ocr_input_path = preprocessed_path or image_path
 
     usage = None
@@ -52,7 +52,7 @@ def _process_document(image_path, doc_type, provider, config):
             mrz_data = extract_mrz(ocr_input_path)
             result = parse_passport(mrz_data, text)
         else:
-            result = parse_ktp(text, cfg)
+            result = normalize_ktp_result(parse_ktp(text, cfg))
 
     is_valid = validate_result(result, doc_type_normalized)
     return result, usage, preprocessed_path, doc_type_normalized, provider_normalized, is_valid

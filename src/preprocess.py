@@ -10,8 +10,10 @@ def _compute_scale_factor(width, height, max_width=None, max_height=None):
     return min(scale_w, scale_h, 1.0)
 
 
-def preprocess_image(image_path, config=None):
+def preprocess_image(image_path, config=None, provider=None):
     """Preprocess image to improve OCR accuracy and control image size."""
+    provider = (provider or "pytesseract").lower()
+    # For pytesseract, use a more balanced preprocessing pipeline; for other providers, keep original where useful.
     cfg = (config or {}).get("preprocess", {})
     max_width = cfg.get("max_width")
     max_height = cfg.get("max_height")
@@ -39,19 +41,17 @@ def preprocess_image(image_path, config=None):
         new_height = max(1, int(original_height * scale))
         img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
+    if provider != "pytesseract":
+        temp_path = "temp_preprocessed.jpg"
+        imwrite_params = [int(cv2.IMWRITE_JPEG_QUALITY), max(30, min(jpeg_quality, 100))]
+        cv2.imwrite(temp_path, img, imwrite_params)
+        return temp_path
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Noise reduction
-    denoised = cv2.medianBlur(gray, 3)
-
-    # Contrast enhancement using CLAHE
-    clip_limit = float(cfg.get("clahe_clip", 2.0))
-    grid_size = cfg.get("clahe_grid", [8, 8])
-    tile_grid = tuple(grid_size) if isinstance(grid_size, (list, tuple)) and len(grid_size) == 2 else (8, 8)
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid)
-    enhanced = clahe.apply(denoised)
+    filtered = cv2.bilateralFilter(gray, 9, 80, 80)
+    adaptive = cv2.adaptiveThreshold(filtered, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 11)
 
     temp_path = "temp_preprocessed.jpg"
     imwrite_params = [int(cv2.IMWRITE_JPEG_QUALITY), max(30, min(jpeg_quality, 100))]
-    cv2.imwrite(temp_path, enhanced, imwrite_params)
+    cv2.imwrite(temp_path, adaptive, imwrite_params)
     return temp_path
