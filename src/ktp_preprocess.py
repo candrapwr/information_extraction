@@ -455,8 +455,9 @@ def preprocess_ktp(
         # Step 5: resize to uniform target.
         tf = time.perf_counter()
         final = _resize_uniform(cropped, target_w, target_h, pad_color)
-        saver.save(5, f"final_{target_w}x{target_h}", final, quality=jpeg_quality)
         timings["ktp_resize_seconds"] = round(time.perf_counter() - tf, 3)
+        saver.save(5, f"final_{target_w}x{target_h}", final, quality=jpeg_quality)
+
         timings["ktp_output_width"] = target_w
         timings["ktp_output_height"] = target_h
         timings["ktp_debug_dir"] = saver.dir or ""

@@ -35,7 +35,7 @@ local_model:
   use_mlock: false
   warmup_on_start: true
   default_template: "ktp"
-  prompt: "Extract fields from this Indonesian KTP (ID card). For each key, write only the value found on the card. Use null if a field is missing or unreadable. Output JSON only."
+  prompt: "Extract fields from this Indonesian KTP (ID card). For each key, write only the value found on the card. Use null if a field is missing or unreadable. Ignore the 'Gol. Darah' label entirely, do not extract it. Output JSON only."
 
 image_preprocess:
   enabled: false
@@ -76,7 +76,6 @@ templates:
     nama: null
     tempat_tgl_lahir: null
     jenis_kelamin: null
-    gol_darah: null
     alamat: null
     rt_rw: null
     kel_desa: null

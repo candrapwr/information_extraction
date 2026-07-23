@@ -80,12 +80,7 @@ def _extract_json_object(text):
 
 
 # Valid values for structured KTP fields. Anything outside these sets is treated
-# as a misread (e.g. a neighbouring label/value leaking in). This is the most
-# reliable fix for the recurring "Gol. Darah" confusion: the field is usually
-# blank on the physical card, so models leak the address/other label into it.
-# Tokens that look valid but are actually blank markers are kept separate so a
-# post-check can still drop them.
-_VALID_BLOOD = {"A", "B", "O", "AB"}
+# as a misread (e.g. a neighbouring label/value leaking in).
 _VALID_GENDER = {"LAKI-LAKI", "PEREMPUAN", "L", "P"}
 # Sentinels that mean "blank/unknown" on the physical card, not a real value.
 _BLANK_VALUES = {"", "-", "—", "--", "N/A", "Not found", "Not Found", "null"}
@@ -93,13 +88,11 @@ _BLANK_VALUES = {"", "-", "—", "--", "N/A", "Not found", "Not Found", "null"}
 
 def _extract_valid(value, valid_set):
     """Return the value only if it (or a token inside it) is a known member of
-    valid_set. Handles cases like 'Gol. Darah: B' -> 'B'."""
+    valid_set. Handles cases like 'Jenis Kelamin: L' -> 'L'."""
     text = str(value).strip()
     upper = text.upper()
     if upper in valid_set:
         return text
-    # Strip label noise like "Gol. Darah :-" or "Jenis Kelamin: L" by scanning
-    # tokens for a valid one.
     cleaned = re.sub(r"[^A-Za-z0-9/+\-]", " ", upper)
     for token in cleaned.split():
         token = token.strip()
@@ -116,8 +109,6 @@ def _clean_value(key, value):
     text = value.strip()
     if text.upper() in {v.upper() for v in _BLANK_VALUES}:
         return None
-    if key == "gol_darah":
-        return _extract_valid(text, _VALID_BLOOD)
     if key == "jenis_kelamin":
         return _extract_valid(text, _VALID_GENDER)
     return text or None
