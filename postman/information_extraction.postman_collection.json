@@ -1,12 +1,12 @@
 {
   "info": {
-    "name": "Information Extraction API",
+    "name": "Local GGUF OCR API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Sample requests for the KTP & Passport OCR API."
+    "description": "Single-endpoint OCR API using the local GGUF model."
   },
   "item": [
     {
-      "name": "Extract Document Data",
+      "name": "Extract Document",
       "request": {
         "method": "POST",
         "header": [],
@@ -19,14 +19,9 @@
               "src": ""
             },
             {
-              "key": "type",
+              "key": "template",
               "type": "text",
               "value": "ktp"
-            },
-            {
-              "key": "provider",
-              "type": "text",
-              "value": "pytesseract"
             }
           ]
         },

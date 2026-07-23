@@ -1,9 +1,5 @@
-opencv-python
-pytesseract
-passporteye
-Pillow
 Flask
 PyYAML
 Werkzeug
-easyocr
-requests
+llama-cpp-python
+huggingface_hub

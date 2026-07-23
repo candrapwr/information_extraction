@@ -1,198 +1,221 @@
-# KTP & Passport OCR
+# Local GGUF OCR
 
-Pipeline untuk mengekstrak informasi dari KTP Indonesia dan paspor internasional menggunakan Python, OpenCV, serta beberapa engine OCR (pytesseract, EasyOCR, atau API LLM). Proyek ini menyediakan skrip CLI serta layanan Flask sederhana untuk integrasi ke aplikasi lain.
+API dan web sederhana untuk mengekstrak informasi dari gambar dokumen memakai model lokal GGUF. Project ini hanya memakai satu jalur inference: `llama-cpp-python` memuat model dari folder `./model` langsung di proses aplikasi.
 
-## Fitur Utama
-- Ekstraksi elemen inti KTP: NIK, nama, alamat lengkap, RT/RW, kelurahan/desa, kecamatan, kota/kabupaten, provinsi, tempat & tanggal lahir, jenis kelamin, agama, serta status perkawinan.
-- Pembacaan MRZ paspor menggunakan *passporteye* serta OCR tambahan untuk informasi non-MRZ.
-- Pra-pemrosesan citra (grayscale + Otsu thresholding) agar hasil OCR lebih stabil.
-- Otomatis mengecilkan resolusi/ukuran file yang terlalu besar sebelum OCR.
-- Pilihan engine OCR: pytesseract (default), EasyOCR, atau API LLM (misal Google Gemini) dengan parameter yang sama di CLI/API.
-- Heuristik toleran terhadap hasil OCR yang noisy (mis-read huruf, tanda baca hilang, dll.).
-- Konfigurasi fleksibel melalui `config/config.yaml` untuk jalur Tesseract, bahasa OCR, dan pola regex.
+Tidak ada Tesseract, EasyOCR, MRZ parser, atau provider eksternal. Pilihan yang tersedia hanya template output agar format JSON sesuai dokumen.
 
-## Prasyarat
-- Python 3.9+ (dikembangkan dengan 3.13).
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) beserta data bahasa yang relevan. Sangat disarankan meng-instal paket bahasa Indonesia (`ind.traineddata`).
-- Dependensi Python dari `requirements.txt`.
+## Fitur
+- Load model GGUF lokal saat aplikasi Flask start.
+- Upload gambar melalui web atau endpoint API.
+- Web app memakai AJAX, loading animation, dan timer proses tanpa reload halaman.
+- Model membaca gambar dan mengembalikan satu JSON object sesuai template.
+- Output dinormalisasi ke schema template: key yang hilang menjadi `null`, key ekstra dibuang.
+- CLI sederhana untuk menjalankan ekstraksi dari terminal.
+- Konfigurasi ringkas di `config/config.yaml`.
 
-## Instalasi
-```bash
-# opsional: buat virtualenv
-python -m venv venv
-source venv/bin/activate
-
-# instal dependensi
-pip install -r requirements.txt
-```
-
-### Instalasi Tesseract
-- **macOS** (Homebrew):
-  ```bash
-  brew install tesseract
-  ```
-  Setelah terpasang, jalankan `which tesseract`. Pada Mac Apple Silicon biasanya `tesseract` berada di `/opt/homebrew/bin/tesseract`, sedangkan Mac Intel di `/usr/local/bin/tesseract`.
-
-- **Ubuntu/Debian**:
-  ```bash
-  sudo apt-get update
-  sudo apt-get install tesseract-ocr tesseract-ocr-ind
-  ```
-  Jalankan `which tesseract` untuk memastikan executable berada di `/usr/bin/tesseract` (default pada sebagian besar distro).
-
-### Konfigurasi Tesseract
-Perbarui `config/config.yaml` agar `tesseract.path` menunjuk ke hasil `which tesseract`. Misal:
-```yaml
-tesseract:
-  path: "/opt/homebrew/bin/tesseract"
-  lang: "eng+ind"
-```
-Jika Anda menghapus baris `path`, aplikasi otomatis memakai lokasi yang ditemukan oleh `shutil.which("tesseract")`.
-
-Salin template `config/config.example.yaml` menjadi `config/config.yaml`, lalu sesuaikan nilainya (termasuk API key jika menggunakan mode LLM). Edit `config/config.yaml` untuk menyesuaikan bahasa (`tesseract.lang`) maupun opsi lain. Untuk mode EasyOCR dan LLM, sesuaikan juga bagian `easyocr` serta `llm` sesuai kebutuhan.
-
-## Struktur Proyek
-```
+## Struktur
+```text
 .
 ├── config/
-│   └── config.yaml          # Jalur Tesseract + pola regex
+│   ├── config.yaml
+│   └── config.example.yaml
+├── model/                  # auto-created, ignored by git
+├── postman/
+│   └── information_extraction.postman_collection.json
 ├── src/
-│   ├── api.py               # Flask API
-│   ├── preprocess.py        # Fungsi pra-pemrosesan citra
-│   ├── ocr.py               # Wrapper pytesseract/EasyOCR/LLM + MRZ
-│   └── parser.py            # Parser KTP & paspor
-├── main.py                  # Entry-point CLI
+│   ├── api.py
+│   ├── config.py
+│   ├── local_model.py
+│   └── templates/
+│       └── web.html
+├── main.py
 ├── requirements.txt
 └── README.md
 ```
 
-## Penggunaan CLI
+## Instalasi
 ```bash
-python main.py <path_gambar> [ktp|passport] [pytesseract|easyocr|llm]
-
-# contoh
-python main.py data/debby_ktp.jpg ktp           # default: pytesseract
-python main.py data/debby_ktp.jpg ktp easyocr   # pakai EasyOCR
-python main.py data/debby_ktp.jpg ktp llm       # pakai API LLM
-python main.py data/sample_passport.jpg passport
+python -m venv env
+source env/bin/activate
+pip install -r requirements.txt
 ```
 
-Keluaran berupa JSON yang mencakup status, data hasil ekstraksi, indikator `valid`, serta timestamp.
+Folder `model/` tidak perlu dicommit. Jika file model belum ada, aplikasi akan otomatis download dari Hugging Face saat startup pertama.
 
-## Mode Web Sederhana
+Untuk Mac Apple Silicon, `llama-cpp-python` biasanya lebih cepat jika dibuild dengan Metal. Jika install biasa terasa lambat, reinstall dengan opsi Metal sesuai dokumentasi `llama-cpp-python`.
+
+## Konfigurasi
+File utama: `config/config.yaml`.
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+  use_reloader: false
+
+local_model:
+  enabled: true
+  preload_on_start: true
+  backend: "llama_cpp_python"
+  model_path: "./model/Nanonets-OCR-s-Q4_0.gguf"
+  mmproj_path: "./model/Nanonets-OCR-s-mmproj-F16.gguf"
+  model_source:
+    auto_download: true
+    repo_id: "unsloth/Nanonets-OCR-s-GGUF"
+    revision: "main"
+    files:
+      model: "Nanonets-OCR-s-Q4_0.gguf"
+      mmproj: "mmproj-F16.gguf"
+  model_name: "Nanonets-OCR-s"
+  chat_handler: "qwen2.5-vl"
+  ctx_size: 8192
+  n_gpu_layers: -1
+  max_tokens: 2048
+  temperature: 0
+  json_mode: true
+  verbose: false
+  use_mmap: false
+  use_mlock: false
+  warmup_on_start: true
+  default_template: "ktp"
+  prompt: "Return JSON matching schema exactly. Same keys only. Values only, no labels. Use null if unreadable."
+
+templates:
+  ktp:
+    fields:
+      province:
+        label: "PROVINSI"
+        hint: "Top header line, for example: PROVINSI JAWA TIMUR."
+      city:
+        labels: ["KABUPATEN", "KOTA"]
+        hint: "Header line below province, for example: KABUPATEN KEDIRI."
+      nik:
+        label: "NIK"
+        hint: "Indonesian identity number, usually 16 digits."
+      name:
+        label: "Nama"
+        hint: "Full name of the card holder."
+      birth_place:
+        label: "Tempat/Tgl Lahir"
+        hint: "Only the place before the comma. Do not include the date."
+      birth_date:
+        label: "Tempat/Tgl Lahir"
+        hint: "The date after the comma."
+      gender:
+        label: "Jenis Kelamin"
+      blood_type:
+        label: "Gol. Darah"
+        hint: "If only the label is visible without a value, use null."
+      address:
+        label: "Alamat"
+      rt_rw:
+        label: "RT/RW"
+      kelurahan_desa:
+        labels: ["Kel/Desa", "Kelurahan", "Desa"]
+      kecamatan:
+        label: "Kecamatan"
+      religion:
+        label: "Agama"
+      marital_status:
+        label: "Status Perkawinan"
+      occupation:
+        label: "Pekerjaan"
+      nationality:
+        label: "Kewarganegaraan"
+      valid_until:
+        label: "Berlaku Hingga"
+  passport:
+    fields:
+      passport_number:
+        labels: ["Passport No", "Passport Number", "No. Paspor"]
+      name:
+        labels: ["Name", "Nama"]
+      nationality:
+        labels: ["Nationality", "Kewarganegaraan"]
+      date_of_birth:
+        labels: ["Date of Birth", "Tanggal Lahir"]
+      gender:
+        labels: ["Sex", "Gender", "Jenis Kelamin"]
+      expiration_date:
+        labels: ["Date of Expiry", "Expiry Date", "Berlaku Hingga"]
+      country_code:
+        labels: ["Issuing Country", "Country Code"]
+```
+
+Prompt sengaja pendek. Format hasil dikontrol lewat `templates.fields`. `label`/`labels` memberi tahu model tulisan mana yang harus dipakai sebagai mapping di dokumen, sedangkan `hint` memberi konteks singkat. Aplikasi tetap memaksa hasil akhir mengikuti field di template: key yang hilang menjadi `null`, key ekstra dibuang.
+
+## Auto Download Model
+Saat startup, app mengecek `local_model.model_path` dan `local_model.mmproj_path`. Jika salah satu belum ada dan `local_model.model_source.auto_download: true`, file akan didownload dari Hugging Face:
+
+```yaml
+local_model:
+  model_source:
+    repo_id: "unsloth/Nanonets-OCR-s-GGUF"
+    files:
+      model: "Nanonets-OCR-s-Q4_0.gguf"
+      mmproj: "mmproj-F16.gguf"
+```
+
+File remote `mmproj-F16.gguf` disimpan ke path lokal `./model/Nanonets-OCR-s-mmproj-F16.gguf` agar kompatibel dengan config aplikasi.
+
+## Menjalankan Web/API
 ```bash
 python src/api.py
 ```
-Buka browser ke `http://localhost:8000/` (atau port sesuai konfigurasi). Form web memungkinkan Anda memilih berkas gambar, tipe dokumen (`ktp`/`passport`), serta engine OCR (`pytesseract`, `easyocr`, `llm`). Hasil ekstraksi akan tampil sebagai JSON pada halaman yang sama, dan tersedia tautan unduhan koleksi Postman untuk mencoba endpoint API.
 
-### Contoh Keluaran KTP
+Model wajib dimuat saat `python src/api.py` dijalankan. Startup akan memuat GGUF, menjalankan warmup vision kecil, lalu Flask baru listen setelah muncul log `Local GGUF model ready.`.
+
+`use_mmap: false` membuat model dibaca ke memori saat startup, bukan lazy page-in saat request pertama. `warmup_on_start: true` memaksa inisialisasi inference dan mmproj/vision sebelum request pertama.
+
+Untuk stop server, tekan `Ctrl+C`. App memasang shutdown handler yang menutup object `llama-cpp-python` lebih dulu agar proses Metal/ggml tidak crash saat interpreter exit.
+
+Buka:
+```text
+http://localhost:8000/
+```
+
+Endpoint API:
+```bash
+curl -X POST http://localhost:8000/extract \
+  -F "file=@/path/to/document.jpg" \
+  -F "template=ktp"
+```
+
+Contoh respons:
 ```json
 {
   "status": "success",
+  "template": "ktp",
+  "duration_seconds": 2.418,
   "data": {
-    "address": "JL KECAPL V",
-    "birth_date": "24-12-1980",
-    "birth_place": "JAKARTA",
-    "city": "JAKARTA SELATAN",
-    "gender": "Not found",
-    "kecamatan": "JAGAKARSA",
-    "kelurahan_desa": "DAGAKARSA",
-    "marital_status": "BELUM KAWIN",
-    "name": "AKU",
-    "nik": "0074096112900001",
-    "province": "DKI JAKARTA",
-    "religion": "ZISLAM",
-    "rt_rw": "2008 / 005"
+    "name": "BUDI",
+    "nik": "1234567890123456"
   },
-  "valid": false,
-  "timestamp": "..."
+  "timestamp": "2026-07-23T10:00:00+07:00"
 }
 ```
-> Beberapa nilai dapat tetap "Not found" bila bahasa/data latih Tesseract belum terpasang atau kualitas gambar kurang baik. Setelah `ind.traineddata` terpasang, akurasi label seperti jenis kelamin dan golongan darah meningkat.
 
-## Menjalankan API Flask
+## CLI
 ```bash
-python src/api.py
+python main.py /path/to/document.jpg ktp
 ```
 
-Endpoint yang tersedia:
+Argumen template opsional. Jika tidak diisi, CLI memakai `local_model.default_template`.
 
-| Method | Endpoint   | Deskripsi                                        |
-|--------|------------|---------------------------------------------------|
-| POST   | `/extract` | Upload berkas gambar & tipe dokumen (`ktp`/`passport`). |
-
-Contoh permintaan menggunakan `curl`:
-```bash
-curl -X POST http://localhost:5000/extract \
-  -F "file=@data/debby_ktp.jpg" \
-  -F "type=ktp" \
-  -F "provider=easyocr"
+## Postman
+Koleksi tersedia di:
+```text
+postman/information_extraction.postman_collection.json
 ```
 
-Respons API mengikuti format JSON yang sama dengan CLI.
-
-**Port & host:** ubah lewat `config.yaml` (`server.host`, `server.port`, `server.debug`) atau override port/debug sementara via environment variable `OCR_API_PORT` dan `OCR_API_DEBUG` sebelum menjalankan `python src/api.py`.
-
-### Koleksi Postman
-- Koleksi tersedia di `postman/information_extraction.postman_collection.json`.
-- Antarmuka web (`/`) menyediakan tombol unduhan langsung, atau impor file tersebut secara manual ke Postman untuk mencoba endpoint `POST /extract`.
-
-## Ubuntu 24.04 Notes
-### Menjalankan Aplikasi
-```bash
-sudo apt-get update
-sudo apt-get install python3-venv python3-pip tesseract-ocr tesseract-ocr-ind
-python3 -m venv env
-source env/bin/activate
-pip install -r requirements.txt
-python src/api.py
-```
-
-### Firewall & Akses Publik
-Jika menggunakan UFW pada Ubuntu 24.04:
-```bash
-sudo ufw allow 8000/tcp  # atau port sesuai konfigurasi
-sudo ufw status
-```
-Pastikan aplikasi dijalankan dengan `host` yang dapat diakses publik (misal `0.0.0.0`) dan, bila di cloud, buka port pada security group / network rules penyedia.
-
-Untuk akses TLS/production, combo populer adalah menjalankan aplikasi di belakang reverse proxy (misal Nginx) dan memforward port 80/443 ke aplikasi Flask.
-
-## Mode OCR
-- **pytesseract**: mode default yang memanfaatkan instalasi Tesseract lokal. Pastikan `tesseract.path` dan `tesseract.lang` sudah benar.
-- **easyocr**: gunakan ketika ingin memanfaatkan model EasyOCR. Atur daftar bahasa dan opsi GPU di `config.yaml`.
-- **llm**: memanggil endpoint LLM (contoh Google Gemini) untuk mengembalikan JSON terstruktur. Pastikan environment variable untuk API key sesuai (`GEMINI_API_KEY` secara default) dan endpoint/model sudah disetel.
-  Respons akan menyertakan objek `usage` bila penyedia LLM mengembalikan informasi konsumsi token, dan pipeline otomatis mengirim satu permintaan dummy (gambar kosong → `{}`) sebelum permintaan utama agar sesi model siap.
-
-## Konfigurasi
-- **Tesseract**: perbarui `tesseract.path` bila executable tidak berada di `/usr/bin/tesseract`.
-- **Bahasa OCR**: `tesseract.lang` menerima string bahasa dipisah `+` (contoh `eng+ind`). Modul akan otomatis menggunakan bahasa yang tersedia bila sebagian belum terpasang.
-- **Pra-pemrosesan**: atur `preprocess.max_width`, `max_height`, `max_filesize_mb`, `jpeg_quality`, dan parameter CLAHE untuk mengendalikan resolusi/ukuran hasil preprocess.
-- **Server Flask**: sesuaikan `server.host`, `server.port`, `server.debug` atau gunakan env var `OCR_API_PORT`/`OCR_API_DEBUG` saat menjalankan API.
-- **EasyOCR**: atur daftar bahasa (`easyocr.lang`) dan penggunaan GPU (`easyocr.gpu`).
-- **LLM**: isi `llm.endpoint`, `llm.model`, serta `llm.api_key_env` atau `llm.api_key`. Prompt default dapat ditimpa melalui `llm.prompts`, dan Anda dapat menyesuaikan balasan dummy via `llm.dummy_response` bila diperlukan.
-- **Regex Template**: `templates.ktp.fields` berisi pola dasar. Parser juga memakai heuristik tambahan (`src/parser.py`) untuk menangani variasi label / kesalahan OCR.
-
-## Tips Kualitas OCR
-- Gunakan gambar beresolusi tinggi dengan pencahayaan merata.
-- Hindari distorsi perspektif; lakukan crop agar kartu memenuhi frame.
-- Jika hasil terlalu noisy, pertimbangkan filter tambahan (blur ringan, adaptive threshold) sebelum memberi ke pipeline.
+Import koleksi tersebut, lalu isi form-data `file` dan `template` pada request `Extract Document`.
 
 ## Troubleshooting
-- **`TesseractNotFoundError`**: pastikan Tesseract sudah terinstal dan jalurnya benar di `config.yaml`.
-- **Bahasa tidak tersedia**: jalankan `tesseract --list-langs` untuk mengecek bahasa yang terpasang, lalu instal paket yang hilang (misal `sudo apt-get install tesseract-ocr-ind`).
-- **`ImportError: No module named 'src'`**: jalankan skrip melalui `python src/api.py` atau `python -m src.api` dari root proyek; modul path sudah ditangani otomatis di `src/api.py`.
-- **Fontconfig / Matplotlib cache warning**: set `MPLCONFIGDIR` ke direktori yang writable atau abaikan; peringatan tidak mempengaruhi hasil OCR.
-
-## Roadmap
-- Tambah dukungan format KTP model terbaru (e-KTP dengan QR code).
-- Normalisasi hasil (title case, format tanggal ISO).
-- Tambah test suite + dataset contoh untuk regresi otomatis.
-
-## Author
-- Candra Rudy  
-- Website: [datasiber.com](https://datasiber.com)  
-- Email: [candrapwr@datasiber.com](mailto:candrapwr@datasiber.com)
+- `llama-cpp-python belum terinstall`: jalankan `pip install -r requirements.txt` di virtualenv project.
+- Model gagal load: pastikan dua file `.gguf` di folder `model/` ada dan cocok.
+- Handler tidak ditemukan: upgrade `llama-cpp-python`, atau ubah `local_model.chat_handler` ke handler yang tersedia.
+- Out of memory: turunkan `ctx_size`, ubah `n_gpu_layers`, atau gunakan model quantization yang lebih kecil.
 
 ## License
-Proyek ini dirilis di bawah lisensi [MIT](LICENSE).
+Project ini dirilis di bawah lisensi [MIT](LICENSE).

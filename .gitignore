@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 # Virtual environments
+env/
 venv/
 .venv/
 
@@ -17,6 +18,9 @@ venv/
 # OCR temp files
 temp_*.jpg
 *.log
+
+# Downloaded local models
+model/
 
 # Matplotlib cache dir if set locally
 mpl-cache/

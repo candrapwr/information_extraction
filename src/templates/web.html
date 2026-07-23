@@ -1,267 +1,510 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dokumen OCR</title>
+  <title>Local GGUF OCR</title>
   <style>
     :root {
-      color-scheme: light dark;
-      font-family: "Inter", "Segoe UI", sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      background: #eef2f6;
+      color: #17202a;
+    }
+    * {
+      box-sizing: border-box;
     }
     body {
       margin: 0;
       min-height: 100vh;
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-      padding: 3rem 1.5rem 4rem;
-      background: radial-gradient(circle at top, rgba(59,130,246,0.35), rgba(15,23,42,0.95));
+      background:
+        linear-gradient(135deg, rgba(31, 122, 95, 0.08), rgba(67, 97, 238, 0.07)),
+        #eef2f6;
     }
-    .app {
-      width: min(960px, 100%);
-      background: rgba(15, 23, 42, 0.85);
-      border-radius: 20px;
-      padding: 2.5rem;
-      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.4);
-      backdrop-filter: blur(14px);
-      border: 1px solid rgba(148, 163, 184, 0.12);
+    .shell {
+      width: min(1040px, 100%);
+      margin: 0 auto;
+      padding: 38px 20px 56px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
     }
     h1 {
-      margin: 0 0 0.75rem;
-      font-size: clamp(1.8rem, 2.6vw, 2.4rem);
-      font-weight: 700;
-      letter-spacing: -0.02em;
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.15;
+      font-weight: 780;
     }
-    .subtitle {
-      color: #cbd5f5;
-      margin-bottom: 2.5rem;
-      max-width: 36rem;
-      line-height: 1.6;
+    .model {
+      padding: 8px 11px;
+      border: 1px solid #c9d2df;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #526174;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .panel {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #d8dee8;
+      border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(23, 32, 42, 0.08);
+    }
+    .input-panel {
+      padding: 18px;
+      position: sticky;
+      top: 18px;
     }
     form {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1.25rem 1.5rem;
-      margin-bottom: 2rem;
-      background: rgba(30, 41, 59, 0.65);
-      border-radius: 16px;
-      padding: 1.75rem;
-      border: 1px solid rgba(148, 163, 184, 0.1);
-    }
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 0.45rem;
+      gap: 14px;
     }
     label {
-      font-weight: 600;
-      font-size: 0.95rem;
-      letter-spacing: 0.01em;
+      display: block;
+      margin-bottom: 7px;
+      color: #526174;
+      font-size: 14px;
+      font-weight: 700;
     }
     input[type="file"],
     select {
-      background: rgba(15, 23, 42, 0.9);
-      color: inherit;
-      border: 1px solid rgba(148, 163, 184, 0.22);
-      padding: 0.65rem 0.8rem;
-      border-radius: 10px;
-      transition: border-color 0.2s ease, transform 0.2s ease;
+      width: 100%;
+      min-height: 44px;
+      padding: 9px 10px;
+      border: 1px solid #c9d2df;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #17202a;
     }
-    input[type="file"]:focus,
-    select:focus {
-      outline: none;
-      border-color: rgba(96, 165, 250, 0.9);
-      transform: translateY(-1px);
-    }
-    .actions {
+    .file-card {
       display: flex;
-      align-items: flex-end;
-      justify-content: flex-start;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid #d8dee8;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #526174;
+      font-size: 13px;
     }
-    button {
-      padding: 0.75rem 1.7rem;
+    .file-dot {
+      width: 10px;
+      height: 10px;
       border-radius: 999px;
-      border: none;
-      font-weight: 600;
+      background: #1f7a5f;
+      flex: 0 0 auto;
+    }
+    button,
+    .postman-link {
+      min-height: 46px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 8px;
+      background: #1f7a5f;
+      color: #ffffff;
+      font-weight: 760;
       cursor: pointer;
-      background: linear-gradient(135deg, #0284c7, #38bdf8);
-      color: #0f172a;
-      box-shadow: 0 14px 28px rgba(14,116,144,0.35);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 20px 36px rgba(14,116,144,0.45);
-    }
-    .card {
-      background: rgba(30, 41, 59, 0.75);
-      border-radius: 16px;
-      padding: 1.75rem;
-      border: 1px solid rgba(148, 163, 184, 0.1);
-      margin-top: 1.75rem;
-    }
-    .badge {
+      text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
-      background: rgba(56, 189, 248, 0.16);
-      border: 1px solid rgba(96, 165, 250, 0.35);
-      color: #bae6fd;
-      padding: 0.25rem 0.75rem;
+      justify-content: center;
+      transition: background 0.18s ease, transform 0.18s ease;
+    }
+    button:hover,
+    .postman-link:hover {
+      background: #17634d;
+      transform: translateY(-1px);
+    }
+    button:disabled {
+      background: #8aa79d;
+      cursor: wait;
+      transform: none;
+    }
+    .status-panel {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+    .state-card {
+      display: none;
+      border: 1px solid #d8dee8;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 16px;
+    }
+    .state-card.active {
+      display: block;
+    }
+    .loading-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .spinner {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 4px solid #d8eee6;
+      border-top-color: #1f7a5f;
+      animation: spin 0.85s linear infinite;
+      flex: 0 0 auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading-title {
+      margin: 0 0 4px;
+      font-size: 17px;
+      font-weight: 760;
+    }
+    .loading-copy {
+      margin: 0;
+      color: #526174;
+      font-size: 14px;
+    }
+    .timer {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .metric {
+      padding: 10px;
+      border: 1px solid #d8dee8;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+    .metric span {
+      display: block;
+      color: #526174;
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+    .metric strong {
+      font-size: 17px;
+    }
+    .progress {
+      height: 8px;
+      overflow: hidden;
       border-radius: 999px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      background: #dce4ee;
+      margin-top: 14px;
+    }
+    .progress span {
+      display: block;
+      width: 42%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #1f7a5f, #4361ee);
+      animation: sweep 1.25s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(250%); }
     }
     .alert {
-      padding: 0.9rem 1rem;
-      border-radius: 12px;
-      margin-top: 1.25rem;
-      font-weight: 500;
+      display: none;
+      padding: 12px 14px;
+      border-radius: 8px;
       border: 1px solid transparent;
     }
+    .alert.active {
+      display: block;
+    }
     .alert.error {
-      background: rgba(244, 63, 94, 0.1);
-      border-color: rgba(248, 113, 113, 0.35);
-      color: #fecdd3;
+      background: #fff1f2;
+      border-color: #fecdd3;
+      color: #9f1239;
     }
     .alert.success {
-      background: rgba(34, 197, 94, 0.12);
-      border-color: rgba(74, 222, 128, 0.35);
-      color: #bbf7d0;
+      background: #ecfdf5;
+      border-color: #bbf7d0;
+      color: #166534;
     }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 0.75rem;
-      margin: 1.25rem 0 1.5rem;
+    .result-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
     }
-    .meta-tile {
-      background: rgba(15, 23, 42, 0.9);
-      border-radius: 12px;
-      padding: 0.75rem 1rem;
-      border: 1px solid rgba(148, 163, 184, 0.08);
-      font-size: 0.9rem;
+    h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: #526174;
+      font-size: 13px;
+    }
+    .pill {
+      padding: 5px 8px;
+      border: 1px solid #d8dee8;
+      border-radius: 999px;
+      background: #ffffff;
     }
     pre {
-      background: rgba(10, 12, 20, 0.85);
-      padding: 1.2rem 1.4rem;
-      border-radius: 14px;
+      margin: 0;
+      padding: 14px;
+      min-height: 280px;
       overflow-x: auto;
-      margin: 0;
-      font-size: 0.92rem;
-      border: 1px solid rgba(148, 163, 184, 0.1);
+      border-radius: 8px;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 13px;
+      line-height: 1.55;
     }
-    .postman-card {
+    .empty {
+      display: none;
+      min-height: 430px;
+      place-items: center;
+      text-align: center;
+      color: #526174;
+    }
+    .empty.active {
+      display: grid;
+    }
+    .empty strong {
+      display: block;
+      color: #17202a;
+      font-size: 18px;
+      margin-bottom: 6px;
+    }
+    .footer-actions {
       display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      margin-top: 2rem;
+      justify-content: flex-end;
+      margin-top: 14px;
     }
-    .postman-card p {
-      margin: 0;
-      color: #cbd5f5;
-      line-height: 1.6;
+    @media (max-width: 820px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+      .input-panel {
+        position: static;
+      }
+      .timer {
+        grid-template-columns: 1fr;
+      }
     }
-    .postman-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.55rem;
-      padding: 0.65rem 1.1rem;
-      border-radius: 999px;
-      background: rgba(253, 186, 116, 0.18);
-      border: 1px solid rgba(251, 191, 36, 0.45);
-      color: #fde68a;
-      font-weight: 600;
-      text-decoration: none;
-      width: fit-content;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .postman-link:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 10px 22px rgba(251, 191, 36, 0.25);
-    }
-    @media (max-width: 720px) {
-      body { padding: 2.2rem 1rem; }
-      .app { padding: 1.8rem; }
-      form { grid-template-columns: 1fr; }
-      .actions { justify-content: stretch; }
-      button { width: 100%; }
+    @media (max-width: 560px) {
+      .shell {
+        padding: 28px 14px 42px;
+      }
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      button,
+      .postman-link {
+        width: 100%;
+      }
+      .result-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="app">
-    <span class="badge">KTP & Passport OCR</span>
-    <h1>Ekstraksi Informasi Dokumen</h1>
-    <p class="subtitle">
-      Upload gambar KTP Indonesia atau paspor internasional, pilih engine OCR, dan dapatkan hasil ekstraksi dalam format JSON terstruktur.
-    </p>
+  <main class="shell">
+    <header>
+      <h1>Local GGUF OCR</h1>
+      <span class="model">Nanonets-OCR-s</span>
+    </header>
 
-    <form method="post" enctype="multipart/form-data">
-      <div class="field">
-        <label for="file">Berkas Gambar</label>
-        <input id="file" type="file" name="file" accept="image/*" required>
-      </div>
-      <div class="field">
-        <label for="doc_type">Tipe Dokumen</label>
-        <select id="doc_type" name="type">
-          {% for option in doc_types %}
-          <option value="{{ option }}" {% if option == selected_doc_type %}selected{% endif %}>{{ option|upper }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label for="provider">Engine OCR</label>
-        <select id="provider" name="provider">
-          {% for option in providers %}
-          <option value="{{ option }}" {% if option == selected_provider %}selected{% endif %}>{{ option }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="actions">
-        <button type="submit">Proses Sekarang</button>
-      </div>
-    </form>
+    <div class="workspace">
+      <section class="panel input-panel">
+        <form id="extractForm" method="post" enctype="multipart/form-data">
+          <div>
+            <label for="file">Berkas gambar</label>
+            <input id="file" type="file" name="file" accept="image/*" required>
+          </div>
 
-    {% if error %}
-    <div class="alert error">{{ error }}</div>
-    {% endif %}
+          <div class="file-card">
+            <span class="file-dot"></span>
+            <span id="fileName">Belum ada file</span>
+          </div>
 
-    {% if result %}
-    <div class="alert success">Ekstraksi berhasil.</div>
-    <div class="meta-grid">
-      {% if timestamp %}
-      <div class="meta-tile"><strong>Timestamp</strong><br>{{ timestamp }}</div>
-      {% endif %}
-      {% if is_valid is not none %}
-      <div class="meta-tile"><strong>Valid</strong><br>{{ 'true' if is_valid else 'false' }}</div>
-      {% endif %}
-      {% if usage %}
-      <div class="meta-tile"><strong>LLM Usage</strong><br>{{ usage.get('totalTokenCount', '—') if usage is mapping else usage }}</div>
-      {% endif %}
-    </div>
-    <div class="card">
-      <h2 style="margin-top:0;margin-bottom:1rem;">Data Terstruktur</h2>
-      <pre>{{ result | tojson(indent=2) }}</pre>
-      {% if usage %}
-      <h3 style="margin-top:1.6rem;">Usage Detail</h3>
-      <pre>{{ usage | tojson(indent=2) }}</pre>
-      {% endif %}
-    </div>
-    {% endif %}
+          <div>
+            <label for="template">Template</label>
+            <select id="template" name="template">
+              {% for name in templates %}
+              <option value="{{ name }}" {% if name == selected_template %}selected{% endif %}>{{ name }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-    <div class="card postman-card">
-      <h2 style="margin:0;">Integrasi API Lebih Lanjut</h2>
-      <p>Unduh koleksi Postman untuk mencoba endpoint <code>POST /extract</code> dengan cepat. Koleksi termasuk variabel dasar dan contoh payload multipart.</p>
-      <a class="postman-link" href="{{ postman_url }}" download>
-        ⬇️ Download Postman Collection
-      </a>
+          <button id="submitBtn" type="submit">Ekstrak</button>
+        </form>
+
+        <div class="footer-actions">
+          <a class="postman-link" href="{{ postman_url }}" download>Download Postman</a>
+        </div>
+      </section>
+
+      <section class="panel status-panel">
+        <div id="emptyState" class="empty {% if not result and not error %}active{% endif %}">
+          <div>
+            <strong>Siap memproses dokumen</strong>
+            <span>Hasil JSON akan muncul di panel ini.</span>
+          </div>
+        </div>
+
+        <div id="loadingState" class="state-card">
+          <div class="loading-row">
+            <div class="spinner"></div>
+            <div>
+              <p class="loading-title">Sedang memproses</p>
+              <p class="loading-copy">Model lokal membaca gambar dan mengisi template.</p>
+            </div>
+          </div>
+          <div class="timer">
+            <div class="metric">
+              <span>Waktu berjalan</span>
+              <strong id="elapsedTime">0.0s</strong>
+            </div>
+            <div class="metric">
+              <span>Template</span>
+              <strong id="activeTemplate">{{ selected_template }}</strong>
+            </div>
+            <div class="metric">
+              <span>Status</span>
+              <strong>Running</strong>
+            </div>
+          </div>
+          <div class="progress"><span></span></div>
+        </div>
+
+        <div id="errorState" class="alert error {% if error %}active{% endif %}">
+          <span id="errorText">{{ error or "" }}</span>
+        </div>
+
+        <div id="resultState" class="state-card {% if result %}active{% endif %}">
+          <div class="result-head">
+            <h2>Hasil JSON</h2>
+            <div class="meta">
+              <span id="resultTemplate" class="pill">{% if selected_template %}template: {{ selected_template }}{% endif %}</span>
+              <span id="resultDuration" class="pill">{% if duration_seconds %}durasi: {{ duration_seconds }}s{% endif %}</span>
+              <span id="resultTimestamp" class="pill">{{ timestamp or "" }}</span>
+            </div>
+          </div>
+          <pre id="resultJson">{% if result %}{{ result | tojson(indent=2) }}{% endif %}</pre>
+        </div>
+      </section>
     </div>
   </main>
+
+  <script>
+    const form = document.getElementById("extractForm");
+    const fileInput = document.getElementById("file");
+    const fileName = document.getElementById("fileName");
+    const templateSelect = document.getElementById("template");
+    const submitBtn = document.getElementById("submitBtn");
+    const emptyState = document.getElementById("emptyState");
+    const loadingState = document.getElementById("loadingState");
+    const errorState = document.getElementById("errorState");
+    const resultState = document.getElementById("resultState");
+    const errorText = document.getElementById("errorText");
+    const elapsedTime = document.getElementById("elapsedTime");
+    const activeTemplate = document.getElementById("activeTemplate");
+    const resultTemplate = document.getElementById("resultTemplate");
+    const resultDuration = document.getElementById("resultDuration");
+    const resultTimestamp = document.getElementById("resultTimestamp");
+    const resultJson = document.getElementById("resultJson");
+
+    let timerId = null;
+    let startedAt = 0;
+
+    function setVisible(target) {
+      [emptyState, loadingState, errorState, resultState].forEach((element) => {
+        element.classList.remove("active");
+      });
+      target.classList.add("active");
+    }
+
+    function formatSeconds(value) {
+      return `${value.toFixed(1)}s`;
+    }
+
+    function startTimer() {
+      startedAt = performance.now();
+      elapsedTime.textContent = "0.0s";
+      timerId = window.setInterval(() => {
+        const elapsed = (performance.now() - startedAt) / 1000;
+        elapsedTime.textContent = formatSeconds(elapsed);
+      }, 100);
+    }
+
+    function stopTimer() {
+      if (timerId) {
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+      return (performance.now() - startedAt) / 1000;
+    }
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileName.textContent = file ? file.name : "Belum ada file";
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      if (!fileInput.files || !fileInput.files[0]) {
+        errorText.textContent = "Pilih berkas gambar terlebih dahulu.";
+        setVisible(errorState);
+        return;
+      }
+
+      const formData = new FormData(form);
+      const selectedTemplate = templateSelect.value;
+      activeTemplate.textContent = selectedTemplate;
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Memproses...";
+      setVisible(loadingState);
+      startTimer();
+
+      try {
+        const response = await fetch("{{ url_for('extract_data') }}", {
+          method: "POST",
+          body: formData,
+        });
+        const payload = await response.json();
+        const clientDuration = stopTimer();
+
+        if (!response.ok || payload.status !== "success") {
+          throw new Error(payload.error || "Ekstraksi gagal.");
+        }
+
+        const duration = payload.duration_seconds || clientDuration;
+        resultTemplate.textContent = `template: ${payload.template || selectedTemplate}`;
+        resultDuration.textContent = `durasi: ${Number(duration).toFixed(2)}s`;
+        resultTimestamp.textContent = payload.timestamp || "";
+        resultJson.textContent = JSON.stringify(payload.data || {}, null, 2);
+        setVisible(resultState);
+      } catch (error) {
+        stopTimer();
+        errorText.textContent = error.message || "Terjadi kesalahan.";
+        setVisible(errorState);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Ekstrak";
+      }
+    });
+  </script>
 </body>
 </html>
