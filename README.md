@@ -140,6 +140,8 @@ local_model:
 
 File remote `mmproj-F16.gguf` disimpan ke path lokal `./model/Nanonets-OCR-s-mmproj-F16.gguf` agar kompatibel dengan config aplikasi.
 
+Download selalu diselesaikan ke path final di `./model/*.gguf`. Jika `huggingface_hub` membuat cache sementara, aplikasi akan menyalin file ke path final dan membersihkan cache lama di `./model/.cache`.
+
 ## Menjalankan Web/API
 ```bash
 python src/api.py

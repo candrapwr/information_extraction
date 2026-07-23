@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -142,25 +143,28 @@ def _download_model_file(repo_id, filename, target_path, revision=None):
     hf_hub_download = _load_huggingface_hub()
     target_dir = os.path.dirname(target_path)
     os.makedirs(target_dir, exist_ok=True)
+    temp_target_path = f"{target_path}.part"
+    if os.path.exists(temp_target_path):
+        os.remove(temp_target_path)
 
     print(f"Downloading {filename} from Hugging Face repo {repo_id}...", file=sys.stderr, flush=True)
     if hf_hub_download:
-        downloaded_path = hf_hub_download(
-            repo_id=repo_id,
-            filename=filename,
-            revision=revision,
-            local_dir=target_dir,
-            local_dir_use_symlinks=False,
-        )
+        with tempfile.TemporaryDirectory(prefix="hf-download-", dir=target_dir) as cache_dir:
+            downloaded_path = hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                revision=revision,
+                cache_dir=cache_dir,
+            )
+            shutil.copyfile(downloaded_path, temp_target_path)
     else:
         revision = revision or "main"
         repo_quoted = urllib.parse.quote(repo_id, safe="/")
         filename_quoted = urllib.parse.quote(filename)
         url = f"https://huggingface.co/{repo_quoted}/resolve/{revision}/{filename_quoted}"
-        downloaded_path = os.path.join(target_dir, filename)
-        urllib.request.urlretrieve(url, downloaded_path)
-    if os.path.abspath(downloaded_path) != os.path.abspath(target_path):
-        shutil.move(downloaded_path, target_path)
+        urllib.request.urlretrieve(url, temp_target_path)
+    os.replace(temp_target_path, target_path)
+    shutil.rmtree(os.path.join(target_dir, ".cache"), ignore_errors=True)
     print(f"Saved model file to {target_path}", file=sys.stderr, flush=True)
 
 
