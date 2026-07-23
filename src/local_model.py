@@ -65,80 +65,26 @@ def _extract_json_object(text):
         raise RuntimeError(f"Model response was not valid JSON. Response preview: {preview}")
 
 
-def _labels_for_field(field_config):
-    if not isinstance(field_config, dict):
-        return []
-    labels = field_config.get("labels", field_config.get("label"))
-    if not labels:
-        return []
-    if isinstance(labels, list):
-        return [str(label) for label in labels]
-    return [str(labels)]
-
-
-def _clean_value(key, value, field_config=None):
+def _clean_value(key, value):
     if value in ("", "Not found"):
         return None
     if isinstance(value, str):
-        normalized_value = re.sub(r"[^A-Z0-9]", "", value.upper())
-        for label in _labels_for_field(field_config):
-            normalized_label = re.sub(r"[^A-Z0-9]", "", label.upper())
-            if normalized_value == normalized_label:
-                return None
         if key == "birth_place" and "," in value:
             return value.split(",", 1)[0].strip() or None
     return value
 
 
-def _apply_schema(data, schema, fields=None):
+def _apply_schema(data, schema):
     if not isinstance(data, dict):
         data = {}
-    fields = fields or {}
     normalized = {}
     for key, schema_value in schema.items():
         value = data.get(key)
         if isinstance(schema_value, dict):
-            normalized[key] = _apply_schema(value, schema_value, fields.get(key))
+            normalized[key] = _apply_schema(value, schema_value)
         else:
-            normalized[key] = _clean_value(key, value, fields.get(key))
+            normalized[key] = _clean_value(key, value)
     return normalized
-
-
-def _template_fields(template):
-    if isinstance(template, dict) and isinstance(template.get("fields"), dict):
-        return template["fields"]
-    if isinstance(template, dict):
-        return template
-    return {}
-
-
-def _field_schema(fields):
-    schema = {}
-    for key, field_config in fields.items():
-        if isinstance(field_config, dict) and any(meta in field_config for meta in ("label", "labels", "hint")):
-            schema[key] = field_config.get("default")
-        else:
-            schema[key] = field_config
-    return schema
-
-
-def _field_hints(fields):
-    hints = []
-    for key, field_config in fields.items():
-        if not isinstance(field_config, dict):
-            continue
-        labels = field_config.get("labels", field_config.get("label"))
-        hint = field_config.get("hint")
-        if isinstance(labels, list):
-            labels = ", ".join(str(label) for label in labels)
-        parts = []
-        if labels:
-            parts.append(f"label: {labels}")
-        if hint:
-            parts.append(str(hint))
-        if parts:
-            hints.append(f"- {key}: {'; '.join(parts)}")
-    return "\n".join(hints)
 
 
 def _resolve_chat_handler(local_config, mmproj_path):
@@ -240,6 +186,14 @@ def _model_key(local_config):
         local_config.get("chat_handler", "qwen2.5-vl"),
         local_config.get("ctx_size", 8192),
         local_config.get("n_gpu_layers", -1),
+        local_config.get("n_threads"),
+        local_config.get("n_threads_batch"),
+        local_config.get("n_batch"),
+        local_config.get("n_ubatch"),
+        local_config.get("flash_attn"),
+        local_config.get("op_offload"),
+        local_config.get("use_mmap"),
+        local_config.get("use_mlock"),
     )
 
 
@@ -257,7 +211,7 @@ def get_local_model(config):
 
         ensure_model_files(config)
 
-        model_path, mmproj_path, _, _, _ = key
+        model_path, mmproj_path = key[0], key[1]
         if not os.path.exists(model_path):
             raise RuntimeError(f"Local model file not found: {model_path}")
         if not os.path.exists(mmproj_path):
@@ -275,8 +229,11 @@ def get_local_model(config):
         }
         optional_args = {
             "n_threads": local_config.get("n_threads"),
+            "n_threads_batch": local_config.get("n_threads_batch"),
             "n_batch": local_config.get("n_batch"),
+            "n_ubatch": local_config.get("n_ubatch"),
             "flash_attn": local_config.get("flash_attn"),
+            "op_offload": local_config.get("op_offload"),
             "seed": local_config.get("seed"),
             "use_mmap": local_config.get("use_mmap"),
             "use_mlock": local_config.get("use_mlock"),
@@ -382,21 +339,14 @@ def _schema_for_template(config, template_name):
     selected = template_name or default_template_name(config)
     if selected not in templates:
         raise RuntimeError(f"Template '{selected}' tidak ditemukan di config/config.yaml.")
-    fields = _template_fields(templates[selected])
-    schema = _field_schema(fields)
-    return selected, schema
+    return selected, templates[selected]
 
 
 def _prompt(config, template_name=None):
     local_config = (config or {}).get("local_model", {})
     instruction = local_config.get("prompt") or "Return JSON matching schema exactly."
-    templates = available_templates(config)
     selected, schema = _schema_for_template(config, template_name)
-    fields = _template_fields(templates[selected])
     schema_text = json.dumps(schema, ensure_ascii=False, indent=2)
-    hints = _field_hints(fields)
-    if hints:
-        return f"{instruction}\nTemplate: {selected}\nSchema:\n{schema_text}\nField mapping:\n{hints}"
     return f"{instruction}\nTemplate: {selected}\nSchema:\n{schema_text}"
 
 
@@ -421,8 +371,7 @@ def _response_content(response):
 
 def extract_document(image_path: str, config: Optional[Dict] = None, template_name: Optional[str] = None) -> Tuple[Dict, Optional[Dict]]:
     local_config = (config or {}).get("local_model", {})
-    selected, schema = _schema_for_template(config, template_name)
-    fields = _template_fields(available_templates(config)[selected])
+    _, schema = _schema_for_template(config, template_name)
     llm = get_local_model(config)
     messages = [
         {
@@ -443,7 +392,7 @@ def extract_document(image_path: str, config: Optional[Dict] = None, template_na
     kwargs = {
         "messages": messages,
         "temperature": float(local_config.get("temperature", 0)),
-        "max_tokens": int(local_config.get("max_tokens", 2048)),
+        "max_tokens": int(local_config.get("max_tokens", 512)),
     }
     if local_config.get("json_mode", True):
         kwargs["response_format"] = {"type": "json_object"}
@@ -452,4 +401,4 @@ def extract_document(image_path: str, config: Optional[Dict] = None, template_na
         response = llm.create_chat_completion(**kwargs)
 
     data = _extract_json_object(_response_content(response))
-    return _apply_schema(data, schema, fields), response.get("usage")
+    return _apply_schema(data, schema), response.get("usage")

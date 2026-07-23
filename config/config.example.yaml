@@ -21,11 +21,17 @@ local_model:
   chat_handler: "qwen2.5-vl"
   ctx_size: 8192
   n_gpu_layers: -1
-  max_tokens: 2048
+  n_threads: 4
+  n_threads_batch: 4
+  n_batch: 2048
+  n_ubatch: 512
+  flash_attn: true
+  op_offload: true
+  max_tokens: 512
   temperature: 0
   json_mode: true
   verbose: false
-  use_mmap: false
+  use_mmap: true
   use_mlock: false
   warmup_on_start: true
   default_template: "ktp"
@@ -33,78 +39,28 @@ local_model:
 
 templates:
   ktp:
-    fields:
-      province:
-        label: "PROVINSI"
-        hint: "Top header line, for example: PROVINSI JAWA TIMUR."
-      city:
-        labels: ["KABUPATEN", "KOTA"]
-        hint: "Header line below province, for example: KABUPATEN KEDIRI."
-      nik:
-        label: "NIK"
-        hint: "Indonesian identity number, usually 16 digits."
-      name:
-        label: "Nama"
-        hint: "Full name of the card holder."
-      birth_place:
-        label: "Tempat/Tgl Lahir"
-        hint: "Only the place before the comma, for example KEDIRI from KEDIRI, 26-02-1966. Do not include the date."
-      birth_date:
-        label: "Tempat/Tgl Lahir"
-        hint: "The date after the comma. Use DD-MM-YYYY when readable."
-      gender:
-        label: "Jenis Kelamin"
-        hint: "Value such as LAKI-LAKI or PEREMPUAN."
-      blood_type:
-        label: "Gol. Darah"
-        hint: "Blood type near the gender field when present. If only the label is visible without a value, use null."
-      address:
-        label: "Alamat"
-        hint: "Street or hamlet address, for example: JL.RAYA - DSN PURWOKERTO."
-      rt_rw:
-        label: "RT/RW"
-        hint: "RT/RW format, for example: 002 / 003."
-      kelurahan_desa:
-        labels: ["Kel/Desa", "Kelurahan", "Desa"]
-        hint: "Village or urban-village name."
-      kecamatan:
-        label: "Kecamatan"
-        hint: "District name."
-      religion:
-        label: "Agama"
-        hint: "Religion of the card holder."
-      marital_status:
-        label: "Status Perkawinan"
-        hint: "Marital status such as KAWIN or BELUM KAWIN."
-      occupation:
-        label: "Pekerjaan"
-        hint: "Occupation of the card holder."
-      nationality:
-        label: "Kewarganegaraan"
-        hint: "Value such as WNI or WNA."
-      valid_until:
-        label: "Berlaku Hingga"
-        hint: "Validity date, for example: 26-02-2017 or SEUMUR HIDUP."
+    province: null
+    city: null
+    nik: null
+    name: null
+    birth_place: null
+    birth_date: null
+    gender: null
+    blood_type: null
+    address: null
+    rt_rw: null
+    kelurahan_desa: null
+    kecamatan: null
+    religion: null
+    marital_status: null
+    occupation: null
+    nationality: null
+    valid_until: null
   passport:
-    fields:
-      passport_number:
-        labels: ["Passport No", "Passport Number", "No. Paspor"]
-        hint: "Passport number from the visual zone or MRZ."
-      name:
-        labels: ["Name", "Nama"]
-        hint: "Full name of the passport holder."
-      nationality:
-        labels: ["Nationality", "Kewarganegaraan"]
-        hint: "Nationality code or country name."
-      date_of_birth:
-        labels: ["Date of Birth", "Tanggal Lahir"]
-        hint: "Date of birth of the passport holder."
-      gender:
-        labels: ["Sex", "Gender", "Jenis Kelamin"]
-        hint: "Gender or sex marker."
-      expiration_date:
-        labels: ["Date of Expiry", "Expiry Date", "Berlaku Hingga"]
-        hint: "Passport expiration date."
-      country_code:
-        labels: ["Issuing Country", "Country Code"]
-        hint: "Issuing country code, for example: IDN."
+    passport_number: null
+    name: null
+    nationality: null
+    date_of_birth: null
+    gender: null
+    expiration_date: null
+    country_code: null
