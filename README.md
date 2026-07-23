@@ -1,226 +1,244 @@
-# Local GGUF OCR
+<div align="center">
 
-API dan web sederhana untuk mengekstrak informasi dari gambar dokumen memakai model lokal GGUF. Project ini hanya memakai satu jalur inference: `llama-cpp-python` memuat model dari folder `./model` langsung di proses aplikasi.
+# 🪪 Local GGUF OCR
 
-Tidak ada Tesseract, EasyOCR, MRZ parser, atau provider eksternal. Pilihan yang tersedia hanya template output agar format JSON sesuai dokumen.
+**Ekstraksi KTP Indonesia memakai model vision lokal — tanpa cloud, tanpa OCR eksternal.**
 
-## Fitur
-- Load model GGUF lokal saat aplikasi Flask start.
-- Upload gambar melalui web atau endpoint API.
-- Web app memakai AJAX, loading animation, dan timer proses tanpa reload halaman.
-- Model membaca gambar dan mengembalikan satu JSON object sesuai template.
-- Output dinormalisasi ke schema template: key yang hilang menjadi `null`, key ekstra dibuang.
-- CLI sederhana untuk menjalankan ekstraksi dari terminal.
-- Konfigurasi ringkas di `config/config.yaml`.
+Upload foto KTP (selfie, scan, atau foto meja) → crop otomatis → verifikasi NIK → resize seragam → model vision membaca → JSON terstruktur.
 
-## Struktur
-```text
-.
-├── config/
-│   ├── config.yaml
-│   └── config.example.yaml
-├── model/                  # auto-created, ignored by git
-├── postman/
-│   └── information_extraction.postman_collection.json
-├── src/
-│   ├── api.py
-│   ├── config.py
-│   ├── local_model.py
-│   └── templates/
-│       └── web.html
-├── main.py
-├── requirements.txt
-└── README.md
+[Fitur](#-fitur) · [Demo](#-cara-kerja) · [Instalasi](#-instalasi) · [Penggunaan](#-penggunaan) · [Konfigurasi](#-konfigurasi)
+
+</div>
+
+---
+
+## ✨ Fitur
+
+- 🔒 **100% lokal** — `llama-cpp-python` load model GGUF dari `./model`, tidak ada request ke cloud
+- ✂️ **Auto-crop KTP** — deteksi kartu via edge-density (OpenCV), luruskan kartu miring, anti over-crop
+- 🔍 **Verifikasi NIK** — konfirmasi gambar benar-benar KTP via template matching + deteksi baris 16-digit; bukan KTP → error
+- 📐 **Resize seragam 856×540** — semua input dinormalkan ke rasio KTP sebelum masuk model (ringan + akurat)
+- 🧠 **Template schema** — KTP (16 field Bahasa Indonesia) & paspor; output dinormalisasi otomatis
+- 🖥️ **Web + REST API** — UI AJAX dengan loading state & timer, plus endpoint `/extract`
+- ⌨️ **CLI** — ekstraksi langsung dari terminal
+- 🐛 **Debug output** — setiap step preprocessing disimpan untuk inspeksi visual
+
+## 🎯 Kenapa bukan OCR biasa?
+
+OCR engine (Tesseract, EasyOCR) butuh dependency berat dan sering kacau di KTP yang miring/kotor. Pendekatan ini berbeda:
+
+| Tahap | Tools | Tujuan |
+|-------|-------|--------|
+| **Preprocess** | OpenCV (sudah ada) | crop + luruskan + verifikasi KTP |
+| **Baca** | Model vision 3B lokal | pahami layout + ekstrak field sekaligus |
+
+Hasilnya: input macam apa pun (foto selfie, scan, foto meja) masuk sebagai **KTP yang bersih dan seragam** ke model → akurasi tinggi, beban model minim.
+
+## 🧩 Cara Kerja
+
+```
+┌─────────────┐    ┌──────────────────────────┐    ┌─────────────┐    ┌──────────┐
+│  Upload     │───▶│  KTP Preprocessing       │───▶│  Model      │───▶│  JSON    │
+│  (apa pun)  │    │  1. CLAHE contrast       │    │  Vision 3B  │    │  field   │
+└─────────────┘    │  2. deteksi kartu        │    │  (lokal)    │    └──────────┘
+                   │  3. crop + deskew        │    └─────────────┘
+                   │  4. verifikasi NIK ✅/❌  │
+                   │  5. resize 856×540       │
+                   └──────────────────────────┘
 ```
 
-## Instalasi
+- **Gagal verifikasi NIK** (mis. foto bukan KTP) → HTTP **400** dengan alasan spesifik, sebelum membuang waktu ke model
+- **Sudah tight-crop?** algoritma otomatis skip crop (anti over-crop)
+- **Debug** disimpan per-request di `debug_ktp/` untuk Anda cek
+
+## 📦 Instalasi
+
 ```bash
 python -m venv env
 source env/bin/activate
 pip install -r requirements.txt
 ```
 
-Folder `model/` tidak perlu dicommit. Jika file model belum ada, aplikasi akan otomatis download dari Hugging Face saat startup pertama.
+Folder `model/` tidak perlu dicommit. Jika file model belum ada, aplikasi **otomatis download** dari Hugging Face saat startup pertama.
 
-Untuk Mac Apple Silicon, `llama-cpp-python` biasanya lebih cepat jika dibuild dengan Metal. Jika install biasa terasa lambat, reinstall dengan opsi Metal sesuai dokumentasi `llama-cpp-python`.
+> **Mac Apple Silicon:** `llama-cpp-python` jauh lebih cepat jika dibuild dengan Metal:
+> ```bash
+> CMAKE_ARGS="-DGGML_METAL=on" pip install --upgrade --force-reinstall llama-cpp-python
+> ```
 
-## Konfigurasi
-File utama: `config/config.yaml`.
+## 🚀 Penggunaan
 
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8000
-  debug: true
-  use_reloader: false
-
-local_model:
-  enabled: true
-  preload_on_start: true
-  backend: "llama_cpp_python"
-  model_path: "./model/Nanonets-OCR-s-Q4_0.gguf"
-  mmproj_path: "./model/Nanonets-OCR-s-mmproj-F16.gguf"
-  model_source:
-    auto_download: true
-    repo_id: "unsloth/Nanonets-OCR-s-GGUF"
-    revision: "main"
-    files:
-      model: "Nanonets-OCR-s-Q4_0.gguf"
-      mmproj: "mmproj-F16.gguf"
-  model_name: "Nanonets-OCR-s"
-  chat_handler: "qwen2.5-vl"
-  ctx_size: 8192
-  n_gpu_layers: -1
-  n_threads: 4
-  n_threads_batch: 4
-  n_batch: 2048
-  n_ubatch: 512
-  flash_attn: true
-  op_offload: true
-  max_tokens: 512
-  temperature: 0
-  json_mode: false
-  verbose: false
-  use_mmap: true
-  use_mlock: false
-  warmup_on_start: true
-  default_template: "ktp"
-  prompt: "Return JSON matching schema exactly. Same keys only. Values only, no labels. Use null if unreadable."
-
-image_preprocess:
-  enabled: true
-  max_width: 768
-  max_height: 768
-  jpeg_quality: 85
-  jpeg_optimize: false
-  reencode_if_unchanged: false
-
-templates:
-  ktp:
-    province: null
-    city: null
-    nik: null
-    name: null
-    birth_place: null
-    birth_date: null
-    gender: null
-    blood_type: null
-    address: null
-    rt_rw: null
-    kelurahan_desa: null
-    kecamatan: null
-    religion: null
-    marital_status: null
-    occupation: null
-    nationality: null
-    valid_until: null
-  passport:
-    passport_number: null
-    name: null
-    nationality: null
-    date_of_birth: null
-    gender: null
-    expiration_date: null
-    country_code: null
-```
-
-Prompt sengaja pendek dan hanya berisi instruction, nama template, serta schema JSON. Template juga hanya berisi elemen output agar tidak membingungkan user. Aplikasi tetap memaksa hasil akhir mengikuti field di template: key yang hilang menjadi `null`, key ekstra dibuang.
-
-## Auto Download Model
-Saat startup, app mengecek `local_model.model_path` dan `local_model.mmproj_path`. Jika salah satu belum ada dan `local_model.model_source.auto_download: true`, file akan didownload dari Hugging Face:
-
-```yaml
-local_model:
-  model_source:
-    repo_id: "unsloth/Nanonets-OCR-s-GGUF"
-    files:
-      model: "Nanonets-OCR-s-Q4_0.gguf"
-      mmproj: "mmproj-F16.gguf"
-```
-
-File remote `mmproj-F16.gguf` disimpan ke path lokal `./model/Nanonets-OCR-s-mmproj-F16.gguf` agar kompatibel dengan config aplikasi.
-
-Download selalu diselesaikan ke path final di `./model/*.gguf`. Jika `huggingface_hub` membuat cache sementara, aplikasi akan menyalin file ke path final dan membersihkan cache lama di `./model/.cache`.
-
-## Menjalankan Web/API
+### Web UI
 ```bash
 python src/api.py
 ```
+Buka `http://localhost:8000/` → pilih file → pilih template → **Ekstrak**.
 
-Model wajib dimuat saat `python src/api.py` dijalankan. Startup akan memuat GGUF, menjalankan warmup vision kecil, lalu Flask baru listen setelah muncul log `Local GGUF model ready.`.
-
-`use_mmap: true` menjaga penggunaan RAM lebih rendah karena file model dipetakan oleh OS. `warmup_on_start: true` tetap memaksa inisialisasi inference dan mmproj/vision sebelum request pertama.
-
-Setting performa dibuat mendekati log `llama-server`: `n_threads: 4`, `n_threads_batch: 4`, `n_batch: 2048`, `flash_attn: true`, dan `op_offload: true`. Default tetap memakai `qwen2.5-vl` supaya prompt yang dikirim tetap pendek sesuai config. `mtmd` bisa lebih mirip `llama-server`, tetapi pada model ini ia menambahkan prompt OCR bawaan yang panjang.
-
-`image_preprocess.enabled: true` membuat gambar besar di-resize maksimal ke `768x768` dan dikirim sebagai JPEG quality `85` sebelum masuk ke model. Jika gambar sudah lebih kecil dari batas, file asli tetap dipakai agar tidak menambah waktu dan tidak menurunkan akurasi. Set `reencode_if_unchanged: true` hanya jika ingin memaksa kompresi JPEG untuk semua gambar.
-
-Jika ingin lebih agresif, turunkan `max_width` dan `max_height` ke `512` atau `448`, tetapi akurasi OCR bisa turun.
-
-Untuk stop server, tekan `Ctrl+C`. App memasang shutdown handler yang menutup object `llama-cpp-python` lebih dulu agar proses Metal/ggml tidak crash saat interpreter exit.
-
-Buka:
-```text
-http://localhost:8000/
-```
-
-Endpoint API:
+### REST API
 ```bash
 curl -X POST http://localhost:8000/extract \
-  -F "file=@/path/to/document.jpg" \
+  -F "file=@/path/to/ktp.jpg" \
   -F "template=ktp"
 ```
 
-Contoh respons:
+**Respons sukses (HTTP 200):**
 ```json
 {
   "status": "success",
   "template": "ktp",
-  "duration_seconds": 2.418,
+  "duration_seconds": 16.8,
   "timings": {
-    "get_model_seconds": 0.0,
-    "image_preprocess_seconds": 0.015,
-    "image_preprocess_enabled": true,
-    "image_original_width": 512,
-    "image_original_height": 334,
-    "image_processed_width": 512,
-    "image_processed_height": 334,
-    "image_compression_ratio": 1.0,
-    "image_preprocess_skipped": "within_limit",
-    "prompt_build_seconds": 0.0,
-    "inference_seconds": 2.391,
-    "parse_seconds": 0.0,
-    "total_extract_seconds": 2.392,
-    "save_upload_seconds": 0.001
+    "ktp_crop_method": "perspective",
+    "ktp_nik_digits": 16,
+    "ktp_nik_score": 0.63,
+    "inference_seconds": 15.1
   },
   "data": {
-    "name": "BUDI",
-    "nik": "1234567890123456"
-  },
-  "timestamp": "2026-07-23T10:00:00+07:00"
+    "provinsi": "DAERAH ISTIMEWA YOGYAKARTA",
+    "kabupaten_kota": "GUNUNGKIDUL",
+    "nik": "1111111111111111",
+    "nama": "LUNA ANGGI PRATAMA",
+    "tempat_tgl_lahir": "WONOGIRI, 28-06-2003",
+    "jenis_kelamin": "LAKI-LAKI",
+    "agama": "ISLAM",
+    "pekerjaan": "NELAYAN/PERIKANAN"
+  }
 }
 ```
 
-## CLI
+**Respons gagal — bukan KTP (HTTP 400):**
+```json
+{
+  "status": "error",
+  "reason": "nik_not_found",
+  "error": "Tidak terdeteksi teks/angka 'NIK' pada gambar (score=0.00, digits=0). Pastikan gambar adalah KTP yang jelas.",
+  "template": "ktp"
+}
+```
+
+### CLI
 ```bash
-python main.py /path/to/document.jpg ktp
+python main.py /path/to/ktp.jpg ktp
 ```
 
-Argumen template opsional. Jika tidak diisi, CLI memakai `local_model.default_template`.
+## ⚙️ Konfigurasi
 
-## Postman
-Koleksi tersedia di:
+File: `config/config.yaml`. Salin dari `config.example.yaml`.
+
+### Model & inference
+```yaml
+local_model:
+  model_path: "./model/Nanonets-OCR-s-Q4_0.gguf"
+  chat_handler: "qwen2.5-vl"
+  ctx_size: 8192
+  n_gpu_layers: -1          # offload penuh ke GPU (Metal/CUDA)
+  flash_attn: true
+  op_offload: true
+  max_tokens: 512
+  temperature: 0
+  default_template: "ktp"
+  prompt: "Extract fields from this Indonesian KTP (ID card). For each key, write only the value found on the card. Use null if a field is missing or unreadable. Output JSON only."
+```
+
+### KTP preprocessing (khusus template `ktp`)
+```yaml
+ktp_preprocess:
+  enabled: true
+  target_width: 856         # output seragam
+  target_height: 540
+  ideal_ratio: 1.585        # rasio fisik KTP (85.6mm × 54mm)
+  card_ratio_min: 1.2
+  card_ratio_max: 2.2
+  frame_ratio_min: 1.4      # anti over-crop: frame sudah rasio KTP + blob kecil
+  frame_ratio_max: 1.8      #           -> skip crop (tight scan tidak rusak)
+  blob_subregion_frac: 0.45
+  verify_nik: true          # tolak kalau NIK tidak terdeteksi
+  nik_confidence_threshold: 0.45
+  nik_digit_min: 6
+  nik_digit_max: 45
+  save_steps: true          # simpan setiap step ke debug_ktp/
+  debug_dir: "./debug_ktp"
+```
+
+### Template output
+```yaml
+templates:
+  ktp:
+    provinsi: null
+    kabupaten_kota: null
+    nik: null
+    nama: null
+    tempat_tgl_lahir: null
+    jenis_kelamin: null
+    gol_darah: null
+    alamat: null
+    rt_rw: null
+    kel_desa: null
+    kecamatan: null
+    agama: null
+    status_perkawinan: null
+    pekerjaan: null
+    kewarganegaraan: null
+    berlaku_hingga: null
+  passport:
+    passport_number: null
+    name: null
+    nationality: null
+    # ... (lihat config.example.yaml)
+```
+
+> **Catatan:** Key template KTP sengaja memakai **Bahasa Indonesia (snake-case)** yang mirip label KTP asli — ini membuat model 3B lebih presisi mengaitkan key dengan field kartu.
+
+## 🐛 Inspeksi Debug
+
+Setiap request KTP menyimpan step-by-step ke `debug_ktp/<timestamp>_<random>/`:
+
+```
+00_input.jpg            # gambar asli
+01_after_clahe.jpg      # setelah enhance kontras
+02_edges.jpg            # visualisasi deteksi kartu (kotak merah)
+03_cropped.jpg          # hasil crop + deskew
+04_nik_region.jpg       # area NIK yang diverifikasi
+05_final_856x540.jpg    # output final yg masuk model
+_FAIL.txt               # (hanya jika gagal) berisi alasan
+```
+
+## 🗂️ Struktur
+
 ```text
-postman/information_extraction.postman_collection.json
+.
+├── config/
+│   ├── config.yaml              # konfigurasi (copy dari example)
+│   └── config.example.yaml
+├── model/                       # GGUF models (auto-download, gitignored)
+├── postman/
+│   └── information_extraction.postman_collection.json
+├── sampel/                      # contoh gambar KTP untuk testing
+├── src/
+│   ├── api.py                   # Flask web + REST API
+│   ├── config.py                # loader config
+│   ├── ktp_preprocess.py        # crop + verifikasi NIK + resize
+│   ├── local_model.py           # load model + inference + prompt
+│   └── templates/
+│       └── web.html             # UI web
+├── debug_ktp/                   # output debug preprocessing (gitignored)
+├── main.py                      # entry point CLI
+├── requirements.txt
+└── README.md
 ```
 
-Import koleksi tersebut, lalu isi form-data `file` dan `template` pada request `Extract Document`.
+## 🔧 Troubleshooting
 
-## Troubleshooting
-- `llama-cpp-python belum terinstall`: jalankan `pip install -r requirements.txt` di virtualenv project.
-- Model gagal load: pastikan dua file `.gguf` di folder `model/` ada dan cocok.
-- Handler tidak ditemukan: upgrade `llama-cpp-python`, atau ubah `local_model.chat_handler` ke handler yang tersedia.
-- Out of memory: turunkan `ctx_size`, ubah `n_gpu_layers`, atau gunakan model quantization yang lebih kecil.
+| Masalah | Solusi |
+|---------|--------|
+| `llama-cpp-python belum terinstall` | `pip install -r requirements.txt` di virtualenv |
+| Model gagal load | pastikan dua file `.gguf` di `model/` ada & cocok |
+| Lambat di Mac | rebuild dengan Metal: `CMAKE_ARGS="-DGGML_METAL=on" pip install --force-reinstall llama-cpp-python` |
+| KTP valid ditolak | turunkan `nik_confidence_threshold` / `nik_digit_min` di config |
+| Bukan KTP lolos | naikkan `nik_digit_min` atau `nik_confidence_threshold` |
+| Out of memory | turunkan `ctx_size` atau `n_gpu_layers`, pakai quantization lebih kecil |
+| Over-crop pada tight scan | kecilkan `blob_subregion_frac` (mis. 0.35) |
 
-## License
-Project ini dirilis di bawah lisensi [MIT](LICENSE).
+## 📄 License
+
+[MIT](LICENSE)

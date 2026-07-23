@@ -19,6 +19,9 @@ venv/
 temp_*.jpg
 *.log
 
+# KTP preprocessing debug output (per-request step images)
+debug_ktp/
+
 # Downloaded local models
 model/
 

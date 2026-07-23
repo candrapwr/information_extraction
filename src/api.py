@@ -13,6 +13,7 @@ src_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(src_root)
 
 from src.config import load_config
+from src.ktp_preprocess import KTPDetectionError
 from src.local_model import (
     available_templates,
     default_template_name,
@@ -55,6 +56,16 @@ def _process_document(image_path, config, template_name=None):
     return data, usage, timings
 
 
+def _cleanup_temp_files(image_path):
+    """Remove the uploaded temp file plus any KTP-preprocessed derivative."""
+    for path in (image_path, (image_path + ".ktp.jpg") if image_path else None):
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 @app.route("/extract", methods=["POST"])
 def extract_data():
     if "file" not in request.files:
@@ -86,6 +97,16 @@ def extract_data():
         if usage:
             response["usage"] = usage
         return jsonify(response)
+    except KTPDetectionError as exc:
+        # Preprocessing could not confirm a KTP / NIK marker -> client error.
+        return jsonify({
+            "status": "error",
+            "error": str(exc),
+            "reason": exc.reason,
+            "template": "ktp",
+            "duration_seconds": round(time.perf_counter() - started_at, 3),
+            "timestamp": datetime.now().astimezone().isoformat(),
+        }), 400
     except Exception as exc:
         return jsonify({
             "status": "error",
@@ -94,11 +115,7 @@ def extract_data():
             "timestamp": datetime.now().astimezone().isoformat(),
         }), 500
     finally:
-        if image_path and os.path.exists(image_path):
-            try:
-                os.remove(image_path)
-            except OSError:
-                pass
+        _cleanup_temp_files(image_path)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -123,14 +140,12 @@ def web_form():
                 result, usage, _timings = _process_document(image_path, CONFIG, selected_template)
                 duration_seconds = round(time.perf_counter() - started_at, 3)
                 timestamp = datetime.now().astimezone().isoformat()
+            except KTPDetectionError as exc:
+                error = str(exc)
             except Exception as exc:
                 error = str(exc)
             finally:
-                if image_path and os.path.exists(image_path):
-                    try:
-                        os.remove(image_path)
-                    except OSError:
-                        pass
+                _cleanup_temp_files(image_path)
 
     return render_template(
         "web.html",

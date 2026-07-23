@@ -35,7 +35,7 @@ local_model:
   use_mlock: false
   warmup_on_start: true
   default_template: "ktp"
-  prompt: "Return JSON matching schema exactly. Same keys only. Values only, no labels. Use null if unreadable."
+  prompt: "Extract fields from this Indonesian KTP (ID card). For each key, write only the value found on the card. Use null if a field is missing or unreadable. Output JSON only."
 
 image_preprocess:
   enabled: false
@@ -45,24 +45,47 @@ image_preprocess:
   jpeg_optimize: false
   reencode_if_unchanged: false
 
+ktp_preprocess:
+  # Khusus template "ktp": crop kartu, verifikasi NIK, resize seragam.
+  # Berjalan SEBELUM image_preprocess umum. Hanya memakai OpenCV (tanpa OCR).
+  # Jika kartu/NIK gagal terdeteksi -> error HTTP 400 (lihat api.py).
+  enabled: true
+  target_width: 856
+  target_height: 540
+  ideal_ratio: 1.585           # rasio fisik KTP (85.6mm x 54mm)
+  card_ratio_min: 1.2
+  card_ratio_max: 2.2
+  frame_ratio_min: 1.4         # bila frame input sudah rasio KTP dan blob kecil
+  frame_ratio_max: 1.8         # -> skip crop (anti over-crop pada tight scan)
+  blob_subregion_frac: 0.45    # ambang: blob <45% area frame = teks dalam kartu
+  verify_nik: true
+  nik_confidence_threshold: 0.45
+  nik_strong_threshold: 0.70
+  nik_digit_min: 6
+  nik_digit_max: 45
+  save_steps: true
+  debug_dir: "./debug_ktp"
+  pad_color: [255, 255, 255]
+  jpeg_quality: 90
+
 templates:
   ktp:
-    province: null
-    city: null
-    nik: "NIK"
-    name: "Nama"
-    birth_place_date: "Tempat/Tgl Lahir"
-    gender: "Jenis Kelamin"
-    blood_type: "Gol. Darah"
-    address: "Alamat"
-    rt_rw: "RT/RW"
-    kelurahan_desa: "Kel/Desa"
-    kecamatan: "Kecamatan"
-    religion: "Agama"
-    marital_status: "Status Perkawinan"
-    occupation: "Pekerjaan"
-    nationality: "Kewarganegaraan"
-    valid_until: "Berlaku Hingga"
+    provinsi: null
+    kabupaten_kota: null
+    nik: null
+    nama: null
+    tempat_tgl_lahir: null
+    jenis_kelamin: null
+    gol_darah: null
+    alamat: null
+    rt_rw: null
+    kel_desa: null
+    kecamatan: null
+    agama: null
+    status_perkawinan: null
+    pekerjaan: null
+    kewarganegaraan: null
+    berlaku_hingga: null
   passport:
     passport_number: null
     name: null

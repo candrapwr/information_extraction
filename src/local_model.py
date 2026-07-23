@@ -460,15 +460,27 @@ def extract_document(
     timings = {}
     started_at = time.perf_counter()
     local_config = (config or {}).get("local_model", {})
-    _, schema = _schema_for_template(config, template_name)
+    selected_template, schema = _schema_for_template(config, template_name)
     timings["schema_seconds"] = round(time.perf_counter() - started_at, 3)
 
     model_started_at = time.perf_counter()
     llm = get_local_model(config)
     timings["get_model_seconds"] = round(time.perf_counter() - model_started_at, 3)
 
+    # KTP-specific preprocessing: crop + verify NIK + uniform resize.
+    # Runs only for the "ktp" template; raises on detection failure.
+    active_image_path = image_path
+    ktp_cfg = (config or {}).get("ktp_preprocess", {})
+    if selected_template == "ktp" and ktp_cfg.get("enabled", False):
+        from src.ktp_preprocess import preprocess_ktp
+        ktp_started_at = time.perf_counter()
+        ktp_path, ktp_timings = preprocess_ktp(image_path, config)
+        timings.update(ktp_timings)
+        timings["ktp_pipeline_seconds"] = round(time.perf_counter() - ktp_started_at, 3)
+        active_image_path = ktp_path
+
     image_started_at = time.perf_counter()
-    image_data_uri, image_metadata = _image_to_data_uri(image_path, config.get("image_preprocess"))
+    image_data_uri, image_metadata = _image_to_data_uri(active_image_path, config.get("image_preprocess"))
     timings["image_preprocess_seconds"] = round(time.perf_counter() - image_started_at, 3)
     timings.update(image_metadata)
 

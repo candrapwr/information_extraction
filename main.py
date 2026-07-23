@@ -1,8 +1,10 @@
 import json
+import os
 import sys
 from datetime import datetime
 
 from src.config import load_config
+from src.ktp_preprocess import KTPDetectionError
 from src.local_model import default_template_name, extract_document, preload_local_model
 
 
@@ -22,6 +24,15 @@ def main(image_path, template_name=None):
         if usage:
             output["usage"] = usage
         print(json.dumps(output, indent=2, ensure_ascii=False))
+    except KTPDetectionError as exc:
+        output = {
+            "status": "error",
+            "reason": exc.reason,
+            "error": str(exc),
+            "template": "ktp",
+            "timestamp": datetime.now().astimezone().isoformat(),
+        }
+        print(json.dumps(output, indent=2, ensure_ascii=False))
     except Exception as exc:
         output = {
             "status": "error",
@@ -29,6 +40,14 @@ def main(image_path, template_name=None):
             "timestamp": datetime.now().astimezone().isoformat(),
         }
         print(json.dumps(output, indent=2, ensure_ascii=False))
+    finally:
+        # Remove any KTP-preprocessed derivative; keep the user's input file.
+        ktp_out = image_path + ".ktp.jpg"
+        if os.path.exists(ktp_out):
+            try:
+                os.remove(ktp_out)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":
