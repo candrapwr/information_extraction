@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import mimetypes
 import os
@@ -51,6 +52,17 @@ def _load_huggingface_hub():
     except ImportError as exc:
         return None
     return hf_hub_download
+
+
+def _load_pillow():
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as exc:
+        raise ImportError(
+            "Pillow belum terinstall. Jalankan `pip install -r requirements.txt` "
+            "atau set image_preprocess.enabled: false."
+        ) from exc
+    return Image, ImageOps
 
 
 def _extract_json_object(text):
@@ -301,6 +313,8 @@ def preload_local_model(config, force=False):
     local_config = (config or {}).get("local_model", {})
     should_preload = force or local_config.get("preload_on_start", True)
     if local_config.get("enabled", False) and should_preload:
+        if (config or {}).get("image_preprocess", {}).get("enabled", False):
+            _load_pillow()
         print("Loading local GGUF model...", file=sys.stderr, flush=True)
         model = get_local_model(config)
         print("Warming up local GGUF model...", file=sys.stderr, flush=True)
@@ -310,13 +324,75 @@ def preload_local_model(config, force=False):
     return None
 
 
-def _image_to_data_uri(image_path):
+def _image_to_data_uri(image_path, preprocess_config=None):
+    preprocess_config = preprocess_config or {}
+    metadata = {
+        "image_preprocess_enabled": bool(preprocess_config.get("enabled", False)),
+        "image_original_bytes": os.path.getsize(image_path),
+    }
+
+    if preprocess_config.get("enabled", False):
+        Image, ImageOps = _load_pillow()
+
+        max_width = int(preprocess_config.get("max_width", 768))
+        max_height = int(preprocess_config.get("max_height", 768))
+        jpeg_quality = int(preprocess_config.get("jpeg_quality", 85))
+        jpeg_optimize = bool(preprocess_config.get("jpeg_optimize", False))
+        reencode_if_unchanged = bool(preprocess_config.get("reencode_if_unchanged", False))
+
+        with Image.open(image_path) as image:
+            image = ImageOps.exif_transpose(image)
+            metadata["image_original_width"] = image.width
+            metadata["image_original_height"] = image.height
+            original_size = image.size
+
+            if image.mode in ("RGBA", "LA") or "transparency" in image.info:
+                rgba_image = image.convert("RGBA")
+                background = Image.new("RGB", rgba_image.size, "white")
+                background.paste(rgba_image, mask=rgba_image.getchannel("A"))
+                image = background
+            elif image.mode != "RGB":
+                image = image.convert("RGB")
+
+            if max_width > 0 and max_height > 0:
+                resampling = getattr(Image, "Resampling", Image).LANCZOS
+                image.thumbnail((max_width, max_height), resampling)
+
+            if image.size == original_size and not reencode_if_unchanged:
+                mime_type, _ = mimetypes.guess_type(image_path)
+                if not mime_type:
+                    mime_type = "image/jpeg"
+                with open(image_path, "rb") as image_file:
+                    image_bytes = image_file.read()
+                metadata["image_processed_width"] = image.width
+                metadata["image_processed_height"] = image.height
+                metadata["image_processed_bytes"] = len(image_bytes)
+                metadata["image_compression_ratio"] = 1.0
+                metadata["image_preprocess_skipped"] = "within_limit"
+                image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+                return f"data:{mime_type};base64,{image_b64}", metadata
+
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=jpeg_quality, optimize=jpeg_optimize)
+            image_bytes = buffer.getvalue()
+            metadata["image_processed_width"] = image.width
+            metadata["image_processed_height"] = image.height
+        metadata["image_processed_bytes"] = len(image_bytes)
+        metadata["image_compression_ratio"] = round(
+            len(image_bytes) / max(metadata["image_original_bytes"], 1),
+            3,
+        )
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:image/jpeg;base64,{image_b64}", metadata
+
     mime_type, _ = mimetypes.guess_type(image_path)
     if not mime_type:
         mime_type = "image/jpeg"
     with open(image_path, "rb") as image_file:
-        image_b64 = base64.b64encode(image_file.read()).decode("utf-8")
-    return f"data:{mime_type};base64,{image_b64}"
+        image_bytes = image_file.read()
+    metadata["image_processed_bytes"] = len(image_bytes)
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:{mime_type};base64,{image_b64}", metadata
 
 
 def available_templates(config):
@@ -327,7 +403,8 @@ def available_templates(config):
 
 
 def default_template_name(config):
-    local_config = (config or {}).get("local_model", {})
+    config = config or {}
+    local_config = config.get("local_model", {})
     templates = available_templates(config)
     configured = local_config.get("default_template")
     if configured in templates:
@@ -387,8 +464,9 @@ def extract_document(
     timings["get_model_seconds"] = round(time.perf_counter() - model_started_at, 3)
 
     image_started_at = time.perf_counter()
-    image_data_uri = _image_to_data_uri(image_path)
-    timings["image_base64_seconds"] = round(time.perf_counter() - image_started_at, 3)
+    image_data_uri, image_metadata = _image_to_data_uri(image_path, config.get("image_preprocess"))
+    timings["image_preprocess_seconds"] = round(time.perf_counter() - image_started_at, 3)
+    timings.update(image_metadata)
 
     prompt_started_at = time.perf_counter()
     prompt_text = _prompt(config, template_name)

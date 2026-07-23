@@ -3,3 +3,4 @@ PyYAML
 Werkzeug
 llama-cpp-python
 huggingface_hub
+Pillow

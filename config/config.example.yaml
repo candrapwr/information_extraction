@@ -37,6 +37,14 @@ local_model:
   default_template: "ktp"
   prompt: "Return JSON matching schema exactly. Same keys only. Values only, no labels. Use null if unreadable."
 
+image_preprocess:
+  enabled: true
+  max_width: 768
+  max_height: 768
+  jpeg_quality: 85
+  jpeg_optimize: false
+  reencode_if_unchanged: false
+
 templates:
   ktp:
     province: null

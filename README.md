@@ -79,13 +79,21 @@ local_model:
   op_offload: true
   max_tokens: 512
   temperature: 0
-  json_mode: true
+  json_mode: false
   verbose: false
   use_mmap: true
   use_mlock: false
   warmup_on_start: true
   default_template: "ktp"
   prompt: "Return JSON matching schema exactly. Same keys only. Values only, no labels. Use null if unreadable."
+
+image_preprocess:
+  enabled: true
+  max_width: 768
+  max_height: 768
+  jpeg_quality: 85
+  jpeg_optimize: false
+  reencode_if_unchanged: false
 
 templates:
   ktp:
@@ -143,6 +151,10 @@ Model wajib dimuat saat `python src/api.py` dijalankan. Startup akan memuat GGUF
 
 Setting performa dibuat mendekati log `llama-server`: `n_threads: 4`, `n_threads_batch: 4`, `n_batch: 2048`, `flash_attn: true`, dan `op_offload: true`. Default tetap memakai `qwen2.5-vl` supaya prompt yang dikirim tetap pendek sesuai config. `mtmd` bisa lebih mirip `llama-server`, tetapi pada model ini ia menambahkan prompt OCR bawaan yang panjang.
 
+`image_preprocess.enabled: true` membuat gambar besar di-resize maksimal ke `768x768` dan dikirim sebagai JPEG quality `85` sebelum masuk ke model. Jika gambar sudah lebih kecil dari batas, file asli tetap dipakai agar tidak menambah waktu dan tidak menurunkan akurasi. Set `reencode_if_unchanged: true` hanya jika ingin memaksa kompresi JPEG untuk semua gambar.
+
+Jika ingin lebih agresif, turunkan `max_width` dan `max_height` ke `512` atau `448`, tetapi akurasi OCR bisa turun.
+
 Untuk stop server, tekan `Ctrl+C`. App memasang shutdown handler yang menutup object `llama-cpp-python` lebih dulu agar proses Metal/ggml tidak crash saat interpreter exit.
 
 Buka:
@@ -165,7 +177,14 @@ Contoh respons:
   "duration_seconds": 2.418,
   "timings": {
     "get_model_seconds": 0.0,
-    "image_base64_seconds": 0.001,
+    "image_preprocess_seconds": 0.015,
+    "image_preprocess_enabled": true,
+    "image_original_width": 512,
+    "image_original_height": 334,
+    "image_processed_width": 512,
+    "image_processed_height": 334,
+    "image_compression_ratio": 1.0,
+    "image_preprocess_skipped": "within_limit",
     "prompt_build_seconds": 0.0,
     "inference_seconds": 2.391,
     "parse_seconds": 0.0,
