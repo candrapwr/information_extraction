@@ -38,7 +38,7 @@ local_model:
   prompt: "Return JSON matching schema exactly. Same keys only. Values only, no labels. Use null if unreadable."
 
 image_preprocess:
-  enabled: true
+  enabled: false
   max_width: 768
   max_height: 768
   jpeg_quality: 85
@@ -49,21 +49,20 @@ templates:
   ktp:
     province: null
     city: null
-    nik: null
-    name: null
-    birth_place: null
-    birth_date: null
-    gender: null
-    blood_type: null
-    address: null
-    rt_rw: null
-    kelurahan_desa: null
-    kecamatan: null
-    religion: null
-    marital_status: null
-    occupation: null
-    nationality: null
-    valid_until: null
+    nik: "NIK"
+    name: "Nama"
+    birth_place_date: "Tempat/Tgl Lahir"
+    gender: "Jenis Kelamin"
+    blood_type: "Gol. Darah"
+    address: "Alamat"
+    rt_rw: "RT/RW"
+    kelurahan_desa: "Kel/Desa"
+    kecamatan: "Kecamatan"
+    religion: "Agama"
+    marital_status: "Status Perkawinan"
+    occupation: "Pekerjaan"
+    nationality: "Kewarganegaraan"
+    valid_until: "Berlaku Hingga"
   passport:
     passport_number: null
     name: null
