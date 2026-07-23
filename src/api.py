@@ -51,8 +51,8 @@ def _save_upload(file_storage):
 
 def _process_document(image_path, config, template_name=None):
     selected_template = template_name or default_template_name(config)
-    data, usage = extract_document(image_path, config, selected_template)
-    return data, usage
+    data, usage, timings = extract_document(image_path, config, selected_template, return_timings=True)
+    return data, usage, timings
 
 
 @app.route("/extract", methods=["POST"])
@@ -67,9 +67,12 @@ def extract_data():
     image_path = None
     started_at = time.perf_counter()
     try:
+        save_started_at = time.perf_counter()
         image_path = _save_upload(file)
+        save_upload_seconds = round(time.perf_counter() - save_started_at, 3)
         template_name = request.form.get("template") or request.args.get("template")
-        data, usage = _process_document(image_path, CONFIG, template_name)
+        data, usage, timings = _process_document(image_path, CONFIG, template_name)
+        timings["save_upload_seconds"] = save_upload_seconds
         duration_seconds = round(time.perf_counter() - started_at, 3)
 
         response = {
@@ -77,6 +80,7 @@ def extract_data():
             "template": template_name or default_template_name(CONFIG),
             "data": data,
             "duration_seconds": duration_seconds,
+            "timings": timings,
             "timestamp": datetime.now().astimezone().isoformat(),
         }
         if usage:
@@ -116,7 +120,7 @@ def web_form():
             started_at = time.perf_counter()
             try:
                 image_path = _save_upload(file)
-                result, usage = _process_document(image_path, CONFIG, selected_template)
+                result, usage, _timings = _process_document(image_path, CONFIG, selected_template)
                 duration_seconds = round(time.perf_counter() - started_at, 3)
                 timestamp = datetime.now().astimezone().isoformat()
             except Exception as exc:

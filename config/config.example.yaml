@@ -29,7 +29,7 @@ local_model:
   op_offload: true
   max_tokens: 512
   temperature: 0
-  json_mode: true
+  json_mode: false
   verbose: false
   use_mmap: true
   use_mlock: false

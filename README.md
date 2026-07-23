@@ -163,6 +163,15 @@ Contoh respons:
   "status": "success",
   "template": "ktp",
   "duration_seconds": 2.418,
+  "timings": {
+    "get_model_seconds": 0.0,
+    "image_base64_seconds": 0.001,
+    "prompt_build_seconds": 0.0,
+    "inference_seconds": 2.391,
+    "parse_seconds": 0.0,
+    "total_extract_seconds": 2.392,
+    "save_upload_seconds": 0.001
+  },
   "data": {
     "name": "BUDI",
     "nik": "1234567890123456"

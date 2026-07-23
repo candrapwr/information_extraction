@@ -6,9 +6,10 @@ import re
 import shutil
 import sys
 import threading
+import time
 import urllib.parse
 import urllib.request
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 _MODEL = None
 _MODEL_KEY = None
@@ -369,21 +370,41 @@ def _response_content(response):
     return content
 
 
-def extract_document(image_path: str, config: Optional[Dict] = None, template_name: Optional[str] = None) -> Tuple[Dict, Optional[Dict]]:
+def extract_document(
+    image_path: str,
+    config: Optional[Dict] = None,
+    template_name: Optional[str] = None,
+    return_timings: bool = False,
+) -> Union[Tuple[Dict, Optional[Dict]], Tuple[Dict, Optional[Dict], Dict]]:
+    timings = {}
+    started_at = time.perf_counter()
     local_config = (config or {}).get("local_model", {})
     _, schema = _schema_for_template(config, template_name)
+    timings["schema_seconds"] = round(time.perf_counter() - started_at, 3)
+
+    model_started_at = time.perf_counter()
     llm = get_local_model(config)
+    timings["get_model_seconds"] = round(time.perf_counter() - model_started_at, 3)
+
+    image_started_at = time.perf_counter()
+    image_data_uri = _image_to_data_uri(image_path)
+    timings["image_base64_seconds"] = round(time.perf_counter() - image_started_at, 3)
+
+    prompt_started_at = time.perf_counter()
+    prompt_text = _prompt(config, template_name)
+    timings["prompt_build_seconds"] = round(time.perf_counter() - prompt_started_at, 3)
+
     messages = [
         {
             "role": "user",
             "content": [
                 {
                     "type": "image_url",
-                    "image_url": {"url": _image_to_data_uri(image_path)},
+                    "image_url": {"url": image_data_uri},
                 },
                 {
                     "type": "text",
-                    "text": _prompt(config, template_name),
+                    "text": prompt_text,
                 },
             ],
         }
@@ -398,7 +419,15 @@ def extract_document(image_path: str, config: Optional[Dict] = None, template_na
         kwargs["response_format"] = {"type": "json_object"}
 
     with _INFERENCE_LOCK:
+        inference_started_at = time.perf_counter()
         response = llm.create_chat_completion(**kwargs)
+        timings["inference_seconds"] = round(time.perf_counter() - inference_started_at, 3)
 
+    parse_started_at = time.perf_counter()
     data = _extract_json_object(_response_content(response))
-    return _apply_schema(data, schema), response.get("usage")
+    normalized = _apply_schema(data, schema)
+    timings["parse_seconds"] = round(time.perf_counter() - parse_started_at, 3)
+    timings["total_extract_seconds"] = round(time.perf_counter() - started_at, 3)
+    if return_timings:
+        return normalized, response.get("usage"), timings
+    return normalized, response.get("usage")
