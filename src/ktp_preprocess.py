@@ -380,18 +380,46 @@ def _detect_and_crop(img, kcfg, saver) -> Tuple[np.ndarray, str, Dict]:
     return img, "full_frame", info
 
 
+# Quality presets for the standardized output size. Higher = more detail but
+# slower (more image tokens for the vision model). "medium" (856x540) is the
+# validated sweet spot with full field accuracy; going below "low" risks
+# misreading small text (RT/RW, kecamatan).
+_KTP_QUALITY_PRESETS = {
+    "very_low":  (472, 298),   # fastest, lowest accuracy (text >~3% of card)
+    "low":       (588, 372),   # fast; small text may degrade
+    "medium":    (856, 540),   # default, full accuracy
+    "high":      (1024, 646),
+    "very_high": (1280, 808),  # most detail, slowest
+}
+
+
+def _resolve_target_size(kcfg: Dict, quality: Optional[str]):
+    """Pick (width, height) from a quality preset, falling back to the explicit
+    target_width/target_height in config when quality is not given."""
+    if quality:
+        key = str(quality).strip().lower()
+        if key in _KTP_QUALITY_PRESETS:
+            return _KTP_QUALITY_PRESETS[key], key
+    target_w = int(kcfg.get("target_width", 856))
+    target_h = int(kcfg.get("target_height", 540))
+    return (target_w, target_h), "custom"
+
+
 def preprocess_ktp(
     image_path: str,
     config: Optional[Dict] = None,
+    quality: Optional[str] = None,
 ) -> Tuple[str, Dict]:
     """Run KTP preprocessing and return (new_image_path, timing metadata).
+
+    quality: one of very_low/low/medium/high/very_high. When omitted, the
+    explicit target_width/target_height in config is used.
 
     Raises :class:`KTPDetectionError` if the KTP / NIK marker is not found.
     """
     config = config or {}
     kcfg = config.get("ktp_preprocess") or {}
-    target_w = int(kcfg.get("target_width", 856))
-    target_h = int(kcfg.get("target_height", 540))
+    (target_w, target_h), quality_label = _resolve_target_size(kcfg, quality)
     verify_nik = bool(kcfg.get("verify_nik", True))
     nik_threshold = float(kcfg.get("nik_confidence_threshold", 0.45))
     nik_strong_threshold = float(kcfg.get("nik_strong_threshold", 0.7))
@@ -459,6 +487,7 @@ def preprocess_ktp(
         timings["ktp_resize_seconds"] = round(time.perf_counter() - tf, 3)
         timings["ktp_output_width"] = target_w
         timings["ktp_output_height"] = target_h
+        timings["ktp_quality"] = quality_label
         timings["ktp_debug_dir"] = saver.dir or ""
 
         tmp_path = image_path + ".ktp.jpg"

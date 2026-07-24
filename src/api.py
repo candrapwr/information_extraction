@@ -50,9 +50,10 @@ def _save_upload(file_storage):
         temp_file.close()
 
 
-def _process_document(image_path, config, template_name=None):
+def _process_document(image_path, config, template_name=None, quality=None):
     selected_template = template_name or default_template_name(config)
-    data, usage, timings = extract_document(image_path, config, selected_template, return_timings=True)
+    data, usage, timings = extract_document(
+        image_path, config, selected_template, return_timings=True, quality=quality)
     return data, usage, timings
 
 
@@ -82,7 +83,8 @@ def extract_data():
         image_path = _save_upload(file)
         save_upload_seconds = round(time.perf_counter() - save_started_at, 3)
         template_name = request.form.get("template") or request.args.get("template")
-        data, usage, timings = _process_document(image_path, CONFIG, template_name)
+        quality = request.form.get("quality") or request.args.get("quality")
+        data, usage, timings = _process_document(image_path, CONFIG, template_name, quality)
         timings["save_upload_seconds"] = save_upload_seconds
         duration_seconds = round(time.perf_counter() - started_at, 3)
 
@@ -127,6 +129,14 @@ def web_form():
     duration_seconds = None
     templates = available_templates(CONFIG)
     selected_template = request.form.get("template") or default_template_name(CONFIG)
+    selected_quality = request.form.get("quality") or "medium"
+    quality_levels = [
+        ("very_low", "Very Low"),
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("very_high", "Very High"),
+    ]
 
     if request.method == "POST":
         file = request.files.get("file")
@@ -137,7 +147,8 @@ def web_form():
             started_at = time.perf_counter()
             try:
                 image_path = _save_upload(file)
-                result, usage, _timings = _process_document(image_path, CONFIG, selected_template)
+                result, usage, _timings = _process_document(
+                    image_path, CONFIG, selected_template, selected_quality)
                 duration_seconds = round(time.perf_counter() - started_at, 3)
                 timestamp = datetime.now().astimezone().isoformat()
             except KTPDetectionError as exc:
@@ -156,6 +167,8 @@ def web_form():
         duration_seconds=duration_seconds,
         templates=templates,
         selected_template=selected_template,
+        quality_levels=quality_levels,
+        selected_quality=selected_quality,
         postman_url=url_for("download_postman_collection"),
     )
 

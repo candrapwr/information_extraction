@@ -347,6 +347,15 @@
             </select>
           </div>
 
+          <div>
+            <label for="quality">Kualitas (ukuran KTP)</label>
+            <select id="quality" name="quality">
+              {% for value, label in quality_levels %}
+              <option value="{{ value }}" {% if value == selected_quality %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
           <button id="submitBtn" type="submit">Ekstrak</button>
         </form>
 
@@ -412,6 +421,7 @@
     const fileInput = document.getElementById("file");
     const fileName = document.getElementById("fileName");
     const templateSelect = document.getElementById("template");
+    const qualitySelect = document.getElementById("quality");
     const submitBtn = document.getElementById("submitBtn");
     const emptyState = document.getElementById("emptyState");
     const loadingState = document.getElementById("loadingState");

@@ -8,12 +8,12 @@ from src.ktp_preprocess import KTPDetectionError
 from src.local_model import default_template_name, extract_document, preload_local_model
 
 
-def main(image_path, template_name=None):
+def main(image_path, template_name=None, quality=None):
     try:
         config = load_config()
         preload_local_model(config)
         selected_template = template_name or default_template_name(config)
-        data, usage = extract_document(image_path, config, selected_template)
+        data, usage = extract_document(image_path, config, selected_template, quality=quality)
 
         output = {
             "status": "success",
@@ -51,7 +51,11 @@ def main(image_path, template_name=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in {2, 3}:
-        print("Usage: python main.py <image_path> [template]")
+    if len(sys.argv) not in {2, 3, 4}:
+        print("Usage: python main.py <image_path> [template] [quality]")
+        print("  quality: very_low | low | medium | high | very_high (default: medium)")
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2] if len(sys.argv) == 3 else None)
+    image_path = sys.argv[1]
+    template_name = sys.argv[2] if len(sys.argv) >= 3 else None
+    quality = sys.argv[3] if len(sys.argv) >= 4 else None
+    main(image_path, template_name, quality)

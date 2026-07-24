@@ -482,6 +482,7 @@ def extract_document(
     config: Optional[Dict] = None,
     template_name: Optional[str] = None,
     return_timings: bool = False,
+    quality: Optional[str] = None,
 ) -> Union[Tuple[Dict, Optional[Dict]], Tuple[Dict, Optional[Dict], Dict]]:
     timings = {}
     started_at = time.perf_counter()
@@ -500,7 +501,7 @@ def extract_document(
     if selected_template == "ktp" and ktp_cfg.get("enabled", False):
         from src.ktp_preprocess import preprocess_ktp
         ktp_started_at = time.perf_counter()
-        ktp_path, ktp_timings = preprocess_ktp(image_path, config)
+        ktp_path, ktp_timings = preprocess_ktp(image_path, config, quality=quality)
         timings.update(ktp_timings)
         timings["ktp_pipeline_seconds"] = round(time.perf_counter() - ktp_started_at, 3)
         active_image_path = ktp_path
